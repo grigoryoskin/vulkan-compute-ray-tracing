@@ -1,4 +1,4 @@
-# Vulkan ompute shader based ray tracer.
+# Vulkan compute shader based ray tracer.
 
 WIP
 
@@ -25,6 +25,7 @@ make
 ```
 6. Compile shaders. You might want to run this with sudo if you dont have permissions for write.
 ```
+mkdir ../resources/shaders/generated
 sh ../compile.sh
 ```
 7. Run the executable.
