@@ -1,4 +1,6 @@
 # Vulkan compute shader based ray tracer.
+<img width="600" alt="Screen Shot 2021-07-22 at 8 03 03" src="https://user-images.githubusercontent.com/44236259/126570824-43b49258-9bca-4f33-b756-573611cace79.png">
+
 
 ![ezgif-3-e0cf7c5acd74](https://user-images.githubusercontent.com/44236259/126500668-2999f992-3dda-4c17-84d6-3c1b116d000d.gif)
 
