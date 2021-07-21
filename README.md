@@ -1,5 +1,8 @@
 # Vulkan compute shader based ray tracer.
 
+![ezgif-3-9b955787ec62](https://user-images.githubusercontent.com/44236259/126492063-6e5ab570-3e23-43a2-af56-961a4c845576.gif)
+
+
 WIP
 
 ## How to run
