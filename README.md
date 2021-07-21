@@ -1,6 +1,6 @@
-# Vulkan compute to texture
+# Vulkan ompute shader based ray tracer.
 
-
+WIP
 
 ## How to run
 This is an instruction for mac os, but it should work for other systems too, since all the dependencies come from git submodules and build with cmake.
