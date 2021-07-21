@@ -1,0 +1,272 @@
+#version 450
+
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rgba8) uniform image2D img;
+
+struct material {
+    bool emits;
+    vec3 albedo;
+};
+
+struct triangle {
+    vec3 v0;
+    vec3 v1;
+    vec3 v2;
+    uint materialIndex;
+};
+
+struct bvhNode {
+    vec3 min;
+    vec3 max;
+    int leftNodeIndex;
+    int rightNodeIndex;
+    int objectIndex;
+};
+
+layout(binding = 1) uniform UniformBufferObject {
+    vec3 camPos;
+    float time;
+    uint currentSample;
+} ubo;
+
+layout(binding = 2) readonly buffer TriangleBufferObject {
+    triangle[] triangles;
+ };
+
+ layout(binding = 3) readonly buffer MaterialBufferObject {
+    material[] materials;
+ };
+
+layout(binding = 4) readonly buffer AabbBufferObject {
+    bvhNode[] bvh;
+ };
+
+const float pi = 3.1415926535897932385;
+
+// Random number generation using pcg32i_random_t, using inc = 1. Our random state is a uint.
+uint stepRNG(uint rngState)
+{
+  return rngState * 747796405 + 1;
+}
+
+// Steps the RNG and returns a floating-point value between 0 and 1 inclusive.
+float stepAndOutputRNGFloat(inout uint rngState)
+{
+  // Condensed version of pcg_output_rxs_m_xs_32_32, with simple conversion to floating-point [0,1].
+  rngState  = stepRNG(rngState);
+  uint word = ((rngState >> ((rngState >> 28) + 4)) ^ rngState) * 277803737;
+  word      = (word >> 22) ^ word;
+  return float(word) / 4294967295.0f;
+}
+
+uint rngState =  (600 * gl_GlobalInvocationID.x + gl_GlobalInvocationID.y) * (ubo.currentSample+1);
+float random() {
+    return stepAndOutputRNGFloat(rngState);
+}
+
+float random(float min, float max) {
+    // Returns a random real in [min,max).
+    return min + (max-min)*random();
+}
+
+vec3 random_in_unit_sphere() {
+    vec3 p = vec3(random(-0.3,0.3),random(-0.3,0.3),random(-0.3,0.3));
+    return normalize(p);
+}
+
+vec3 random_in_hemisphere(vec3 normal) {
+    vec3 in_unit_sphere = random_in_unit_sphere();
+    if (dot(in_unit_sphere, normal) > 0.0) // In the same hemisphere as the normal
+        return in_unit_sphere;
+    else
+        return -in_unit_sphere;
+}
+
+struct ray {
+    vec3 origin;
+    vec3 dir;
+};
+
+vec3 ray_at(ray r, float t) {
+    return r.origin + t * r.dir;
+}
+
+struct hit_record {
+    vec3 p;
+    vec3 normal;
+    uint materialIndex;
+    float t;
+};
+
+bool scatter(ray r_in, hit_record rec, inout vec3 attenuation, inout ray scattered) {
+    vec3 scatter_direction = random_in_hemisphere(rec.normal);
+    scattered = ray(rec.p, scatter_direction);
+    attenuation = materials[rec.materialIndex].albedo;
+    return materials[rec.materialIndex].emits;
+}
+
+vec3 triIntersect( in vec3 ro, in vec3 rd, in vec3 v0, in vec3 v1, in vec3 v2, inout vec3 n )
+{
+    vec3 a = v0 - v1;
+    vec3 b = v2 - v0;
+    vec3 p = v0 - ro;
+    n = cross( b, a );
+    if(dot(rd,n) > 0) return vec3(-1, -1, -1);
+    vec3 q = cross( p, rd );
+
+    float idet = 1.0/dot( rd, n );
+
+    float u = dot( q, b )*idet;
+    float v = dot( q, a )*idet;
+    float t = dot( n, p )*idet;
+
+    if( u<0.0 || u>1.0 || v<0.0 || (u+v)>1.0 ) t = -1.0;
+    
+    return vec3( t, u, v );
+}
+
+
+bool hit_triangle(int triangle_index, ray r, float tMin, float tMax, inout hit_record rec) {
+    triangle t = triangles[triangle_index];
+    vec3 n = vec3(0,0,0);
+    vec3 hit = triIntersect(r.origin, r.dir, t.v0, t.v1, t.v2, n);
+    if (hit.x != -1 ) {
+        rec.p = r.origin + hit.x * r.dir;
+        rec.normal = n;
+        rec.t = hit.x;
+        rec.materialIndex = t.materialIndex;
+        return true && (hit.x >= tMin && hit.x <= tMax);
+    }
+    return false;
+}
+
+bool hit_triangle_list0(ray r, inout hit_record rec) {
+    float t_min = 0.001;
+    float t_max = 10000;
+
+    hit_record temp_rec;
+    bool hit_anything = false;
+    float closest_so_far = t_max;
+    for (int i = 0; i<triangles.length(); i++) {
+        if (hit_triangle(i, r, t_min, closest_so_far, temp_rec)) {
+            hit_anything = true;
+            closest_so_far = temp_rec.t;
+            rec = temp_rec;
+        }
+    }
+
+    return hit_anything;
+}
+
+// no intersection means vec.x > vec.y (really tNear > tFar)
+vec2 intersectAABB(ray r, vec3 boxMin, vec3 boxMax) {
+    vec3 tMin = (boxMin - r.origin) / r.dir;
+    vec3 tMax = (boxMax - r.origin) / r.dir;
+    vec3 t1 = min(tMin, tMax);
+    vec3 t2 = max(tMin, tMax);
+    float tNear = max(max(t1.x, t1.y), t1.z);
+    float tFar = min(min(t2.x, t2.y), t2.z);
+    return vec2(tNear, tFar);
+}
+
+bool hit_bvh(ray r, inout hit_record rec) {
+    float tmin = 0.01;
+    
+    int nodeStack[16];
+    int stackIndex = 0;
+    
+    nodeStack[stackIndex] = 0;
+    stackIndex++;
+    while (stackIndex>0 && stackIndex<16) {
+        int currentNode = nodeStack[stackIndex-1];
+        stackIndex = stackIndex-1;
+        int leftChild = bvh[currentNode].leftNodeIndex;
+        int rigthChild = bvh[currentNode].rightNodeIndex;
+
+        vec2 tIntersect = intersectAABB(r, bvh[currentNode].min, bvh[currentNode].max);
+        if (tIntersect.x < tIntersect.y) {
+            bool leaf = bvh[currentNode].objectIndex != -1;
+
+            if(leaf) {
+                if(hit_triangle(bvh[currentNode].objectIndex, r, tmin, tIntersect.y + 0.1, rec)) {
+                    return true;
+                }
+            } 
+
+            nodeStack[stackIndex] = leftChild;
+            stackIndex++;
+            nodeStack[stackIndex] = rigthChild;
+            stackIndex++;
+        } 
+    }
+    
+    return false;
+}
+
+vec3 ray_color(ray r) {
+    vec3 unit_direction = normalize(r.dir);
+    hit_record rec;
+
+    vec3 final_color = vec3(1.0);
+    ray current_ray = {r.origin, r.dir};
+    
+    int bounces = 3;
+    for (int i = 0; i< bounces; i++) {
+        if (hit_bvh(current_ray, rec)) {
+            vec3 attenuation;
+            bool emits = scatter(current_ray, rec, attenuation, current_ray);
+            final_color *= attenuation;
+            if (emits) break;
+        } else {
+            final_color *= 0.0;
+            //float t = 0.5*(unit_direction.y + 1.0);
+            //final_color *= (1.0-t)*vec3(1.0, 1.0, 1.0) + t*vec3(0.5, 0.7, 1.0);
+            break;
+
+        }
+    }
+    return final_color;
+    
+    //Leave this out for debug :)
+    /*
+    if (hit_bvh(r, rec)) {
+        vec3 attenuation;
+        bool emits = scatter(current_ray, rec, attenuation, current_ray);
+        return current_ray.dir;
+    } else {
+        return vec3(0.3);
+    }
+*/    
+}
+
+void main()
+{   
+    // Image
+    vec2 imageSize = vec2(imageSize(img));
+
+    // Camera
+    float vfov = 30;
+    float theta = vfov * pi / 180.0;
+    float h = tan(theta/2);
+    float viewport_height = 2.0 * h;
+    float viewport_width = imageSize.x / imageSize.y * viewport_height;
+    float focal_length = 1.0;
+
+    vec3 horizontal = vec3( viewport_width, 0,  0);
+    vec3 vertical = vec3(0, -viewport_height, 0);
+
+
+    vec3 origin = ubo.camPos.zxy * vec3(-1, 1, 1);
+    vec3 lower_left_corner = origin - horizontal/2 - vertical/2 - vec3(0, 0, focal_length);
+
+    vec2 uv = (gl_GlobalInvocationID.xy + vec2(random(), random())) / vec2(imageSize.x - 1, imageSize.y - 1);
+    ray r = {origin, lower_left_corner + uv.x*horizontal + uv.y*vertical - origin};
+    vec3 pixel_color = ray_color(r);
+
+    vec4 currentColor = imageLoad(img, ivec2(gl_GlobalInvocationID.xy)).rgba;
+    vec4 to_write = (vec4(pixel_color, 1.0) + currentColor*(ubo.currentSample))/(ubo.currentSample + 1);
+
+    imageStore(img, ivec2(gl_GlobalInvocationID.xy), to_write);
+}
+
