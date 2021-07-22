@@ -17,10 +17,10 @@ The [scene](https://github.com/grigoryoskin/vulkan-compute-ray-tracing/blob/mast
 WIP
 
 # TODOs:
-[ ] Fix synchronization issues 😠 
-[ ] PBR materials.
-[ ] Monte Carlo integration.
-[ ] Try "roped" bvh to see how it improves performance.
+- [ ] Fix synchronization issues 😠 
+- [ ] PBR materials.
+- [ ] Monte Carlo integration.
+- [ ] Try "roped" bvh to see how it improves performance.
 
 ## How to run
 This is an instruction for mac os, but it should work for other systems too, since all the dependencies come from git submodules and build with cmake.
