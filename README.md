@@ -5,7 +5,22 @@
 
 ![ezgif-3-e0cf7c5acd74](https://user-images.githubusercontent.com/44236259/126500668-2999f992-3dda-4c17-84d6-3c1b116d000d.gif)
 
-Ray tr
+Ray tracer loosely based on [raytracing in one weekend series](https://raytracing.github.io), adapted for real time rendering on GPU.
+
+# How it works.
+Overall project structure comes from my [project template](https://github.com/grigoryoskin/vulkan-project-starter) with some changes to enable compute functionality.
+Compute shader renders the ray traced scene into a texture that gets displayed onto a screen quad with a fragment shader.
+[TextureOutputComputeModel](https://github.com/grigoryoskin/vulkan-compute-ray-tracing/blob/master/src/compute/TextureOutputComputeModel.h) holds the target texture, data buffers, pipeline and descriptor sets.
+
+The [scene](https://github.com/grigoryoskin/vulkan-compute-ray-tracing/blob/master/src/compute/RtScene.h) consists of a an array of materials and an array of triangles. Each triangle holds a reference to the material. Reference is just material's index in the array for ease of use on GPU. 
+
+WIP
+
+# TODOs:
+[] Fix synchronization issues 😠 
+[] PBR materials.
+[] Monte Carlo integration.
+[] Try "roped" bvh to see how it improves performance.
 
 ## How to run
 This is an instruction for mac os, but it should work for other systems too, since all the dependencies come from git submodules and build with cmake.
