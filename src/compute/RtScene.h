@@ -33,6 +33,7 @@ namespace GpuModel
     {
         std::vector<Triangle> triangles;
         std::vector<Material> materials;
+        std::vector<Light> lights;
         std::vector<BvhNode> bvhNodes;
 
         Scene(std::string path_prefix)
@@ -77,10 +78,19 @@ namespace GpuModel
 
             std::cout << "num triangles " << triangles.size() << std::endl;
 
-            for (int i = 0; i < triangles.size(); i++)
+            for (uint32_t i = 0; i < triangles.size(); i++)
             {
-                objects.push_back({i, triangles[i]});
+                Triangle t = triangles[i];
+                objects.push_back({i, t});
+                if (materials[t.materialIndex].emits) {
+                    float area = glm::length(glm::cross(t.v0, t.v1)) * 0.5f;
+                    lights.push_back({i, area});
+                }
             }
+
+            std::cout << "num lights " << lights.size() << std::endl;
+
+
             std::vector<Bvh::BvhNode0> nodes0 = Bvh::createBvh(objects);
             bvhNodes = createGpuBvh(nodes0);
         }

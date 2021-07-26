@@ -357,7 +357,7 @@ private:
         }
 
         // Commented this out for playing around with it later :)
-        // vkQueueWaitIdle(VulkanGlobal::context.presentQueue);
+        vkQueueWaitIdle(VulkanGlobal::context.presentQueue);
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 

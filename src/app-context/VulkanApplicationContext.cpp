@@ -384,7 +384,7 @@ void VulkanApplicationContext::createCommandPool(uint32_t queueFamilyIndex, VkCo
 void VulkanApplicationContext::initSwapchainImageCount()
 {
     SwapChainSupportDetails swapChainSupport = VulkanGlobal::context.querySwapChainSupport();
-    swapChainImageCount = swapChainSupport.capabilities.minImageCount + 1;
+    swapChainImageCount = swapChainSupport.capabilities.minImageCount;
     if (swapChainSupport.capabilities.maxImageCount > 0 &&
         swapChainImageCount > swapChainSupport.capabilities.maxImageCount)
     {

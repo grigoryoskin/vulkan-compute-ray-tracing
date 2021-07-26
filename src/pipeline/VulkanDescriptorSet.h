@@ -64,12 +64,21 @@ namespace VulkanDescriptorSet
         aabbBufferLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
         aabbBufferLayoutBinding.pImmutableSamplers = nullptr; // Optional
 
-        std::array<VkDescriptorSetLayoutBinding, 5> bindings = {
+        VkDescriptorSetLayoutBinding lightsLayoutBinding{};
+        lightsLayoutBinding.binding = 5;
+        lightsLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        lightsLayoutBinding.descriptorCount = 1;
+        lightsLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        lightsLayoutBinding.pImmutableSamplers = nullptr; // Optional
+
+        std::array<VkDescriptorSetLayoutBinding, 6> bindings = {
             samplerLayoutBinding,
             uboLayoutBinding,
             triangleBufferLayoutBinding,
             materialBufferLayoutBinding,
-            aabbBufferLayoutBinding};
+            aabbBufferLayoutBinding,
+            lightsLayoutBinding};
+            
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());

@@ -18,6 +18,7 @@ The [scene](https://github.com/grigoryoskin/vulkan-compute-ray-tracing/blob/mast
 
 Each frame [compute shader](https://github.com/grigoryoskin/vulkan-compute-ray-tracing/blob/master/resources/shaders/source/ray-trace-compute.comp) renders the scene with one sample per pixel and accumulates it in the taget texture.
 
+WIP
 
 ## TODOs:
 - [ ] Fix synchronization issues 😠 

@@ -22,11 +22,20 @@ namespace GpuModel {
         alignas(4)  uint materialIndex;
     };
 
+    // Node in a non recursive BHV for use on GPU.
     struct BvhNode {
         alignas(16) glm::vec3 min;
         alignas(16) glm::vec3 max;
         alignas(4) int leftNodeIndex = -1;
         alignas(4) int rightNodeIndex = -1;
         alignas(4) int objectIndex = -1;
+    };
+
+    // Model of light used for importance sampling.
+    struct Light {
+        // Index in the array of triangles.
+        alignas(4) uint triangleIndex;
+        // Area of the triangle;
+        alignas(4) float area;
     };
 }

@@ -48,7 +48,7 @@ namespace Bvh
     // Utility structure to keep track of the initial triangle index in the triangles array while sorting.
     struct Object0
     {
-        int index = -1;
+        uint32_t index;
         GpuModel::Triangle t;
     };
 
