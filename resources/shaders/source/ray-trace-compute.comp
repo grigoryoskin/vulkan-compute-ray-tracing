@@ -316,7 +316,7 @@ vec3 ray_color(ray r) {
     vec3 final_color = vec3(1.0);
     ray current_ray = {r.origin, r.dir};
     
-    int bounces = 5;
+    int bounces = 3;
     for (int i = 0; i< bounces; i++) {
         if (hit_triangle_list0(current_ray, rec)) {
             vec3 albedo;
@@ -328,9 +328,9 @@ vec3 ray_color(ray r) {
             final_color *= albedo * rec.scatterPdf / rec.samplePdf;
             
         } else {
-            final_color *= 0.0;
-            //float t = 0.5*(unit_direction.y + 1.0);
-            //final_color *= (1.0-t)*vec3(1.0, 1.0, 1.0) + t*vec3(0.5, 0.7, 1.0);
+            //final_color *= 0.0;
+            float t = 0.5*(unit_direction.y + 1.0);
+            final_color *= (1.0-t)*vec3(1.0, 1.0, 1.0) + t*vec3(1.0, 0.1, 1.0);
             break;
 
         }
@@ -365,11 +365,10 @@ void main()
     vec3 horizontal = vec3( viewport_width, 0,  0);
     vec3 vertical = vec3(0, -viewport_height, 0);
 
-
     vec3 origin = ubo.camPos.zxy * vec3(-1, 1, 1);
     vec3 lower_left_corner = origin - horizontal/2 - vertical/2 - vec3(0, 0, focal_length);
 
-    vec2 uv = (gl_GlobalInvocationID.xy + vec2(random(), random())) / vec2(imageSize.x - 1, imageSize.y - 1);
+    vec2 uv = (gl_GlobalInvocationID.xy) / imageSize.xy;
     ray r = {origin, lower_left_corner + uv.x*horizontal + uv.y*vertical - origin};
     vec3 pixel_color = ray_color(r);
 

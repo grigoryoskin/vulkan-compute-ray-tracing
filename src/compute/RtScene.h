@@ -82,14 +82,14 @@ namespace GpuModel
             {
                 Triangle t = triangles[i];
                 objects.push_back({i, t});
-                if (materials[t.materialIndex].emits) {
+                if (materials[t.materialIndex].emits)
+                {
                     float area = glm::length(glm::cross(t.v0, t.v1)) * 0.5f;
                     lights.push_back({i, area});
                 }
             }
 
             std::cout << "num lights " << lights.size() << std::endl;
-
 
             std::vector<Bvh::BvhNode0> nodes0 = Bvh::createBvh(objects);
             bvhNodes = createGpuBvh(nodes0);
