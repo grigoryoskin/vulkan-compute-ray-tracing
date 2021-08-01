@@ -21,8 +21,10 @@ WIP
 
 ## TODOs:
 - [ ] Fix synchronization issues 😠 
+- [X] Glass materials.
+- [ ] Fog.
 - [ ] PBR materials.
-- [ ] Monte Carlo integration.
+- [X] Light sampling
 - [ ] Try "roped" bvh to see how it improves performance.
 
 ## How to run
