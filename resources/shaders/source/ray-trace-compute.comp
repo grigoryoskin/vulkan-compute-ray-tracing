@@ -4,8 +4,13 @@ layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
 layout(set = 0, binding = 0, rgba8) uniform image2D img;
 
+#define LIGHT_MATERIAL 0
+#define LAMBERTIAN_MATERIAL 1
+#define METAL_MATERIAL 2
+#define GLASS_MATERIAL 3
+
 struct material {
-    bool emits;
+    uint materialType;
     vec3 albedo;
 };
 
@@ -137,6 +142,8 @@ struct hit_record {
     vec3 normal;
     uint materialIndex;
     float t;
+    // integer to decrease branches.
+    int backFaceInt;
     // PDF of scattering in given direction due to material properties.
     float scatterPdf;
     // PDF of sampling in given direction.
@@ -178,45 +185,69 @@ vec3 sampleLambertian(vec3 normal, inout float pdf) {
     return randomCosScattered;
 }
 
-bool scatter(ray r_in, inout hit_record rec, inout vec3 albedo, inout ray scattered) {    
-    albedo = materials[rec.materialIndex].albedo;
-    if(materials[rec.materialIndex].emits) {
-        return true;
-    }
-
-    float lightCosine;
-    float lightSamplePdf;
-
-    float lambertianSamplePdf;
-    vec3 lambertianSample = sampleLambertian(rec.normal, lambertianSamplePdf);
-
-    if (random() < 0.5) {
-        // sample light
-        vec3 lightSample = sampleLight(rec.p, lightSamplePdf, lightCosine);
-        scattered = ray(rec.p, lightSample);
-    } else {
-        // sample hemisphere
-        scattered = ray(rec.p, lambertianSample);
-    }
-
-    if(abs(lightCosine) < 0.001) {
-        scattered = ray(rec.p, lambertianSample);
-        lightSamplePdf = lambertianSamplePdf;
-    }
-
-    rec.samplePdf = 0.5 * lambertianSamplePdf + 0.5 *lightSamplePdf;
-    rec.scatterPdf = lambertianSamplePdf;
-
-    return false;
+vec3 sampleMetal(vec3 I, vec3 normal, inout float pdf) {
+    pdf = 1;
+    return reflect(I, normal);
 }
 
-vec3 triIntersect( in vec3 ro, in vec3 rd, in vec3 v0, in vec3 v1, in vec3 v2, inout vec3 n )
+vec3 sampleGlass(vec3 I, hit_record rec, inout float pdf) {
+    pdf = 1;
+    float ir = 1.5;
+    float refraction_ratio = (1 - rec.backFaceInt) * 1.0/ir + rec.backFaceInt * ir; 
+    vec3 i = normalize(I);
+    float cos_theta = min(dot(-i, rec.normal), 1.0);
+    float sin_theta = sqrt(1.0 - cos_theta*cos_theta);
+    float t = floor(clamp(refraction_ratio * sin_theta, 0, 1));
+
+    return t*reflect(i, rec.normal) + (1-t)*refract(i, rec.normal, refraction_ratio);
+}
+
+bool scatter(ray r_in, inout hit_record rec, inout vec3 albedo, inout ray scattered) {    
+    albedo = materials[rec.materialIndex].albedo;
+    //float lightSamplePdf;
+
+    float materialSamplePdf;
+    vec3 materialSample;
+
+    if(materials[rec.materialIndex].materialType == LAMBERTIAN_MATERIAL) {
+        materialSample = sampleLambertian(rec.normal, materialSamplePdf);
+    }
+    else if(materials[rec.materialIndex].materialType == METAL_MATERIAL) {
+        materialSample = sampleMetal(r_in.dir, rec.normal, materialSamplePdf);
+    }
+    else if(materials[rec.materialIndex].materialType == GLASS_MATERIAL) {
+        materialSample = sampleGlass(r_in.dir, rec, materialSamplePdf);
+        albedo = vec3(1.0);
+    }
+    float lightSamplePdf = materialSamplePdf; 
+    vec3 finalSample = materialSample;
+
+    if (random() < 0.5 && materials[rec.materialIndex].materialType == LAMBERTIAN_MATERIAL) {
+        // sample light
+        float lightCosine;
+        finalSample = sampleLight(rec.p, lightSamplePdf, lightCosine);
+
+        if(abs(lightCosine) < 0.001) {
+            finalSample = materialSample;
+            lightSamplePdf = materialSamplePdf;
+        }
+    }
+
+    scattered = ray(rec.p, finalSample);
+    
+    rec.samplePdf = 0.5 * materialSamplePdf + 0.5 *lightSamplePdf;
+    rec.scatterPdf = materialSamplePdf;
+
+    return materials[rec.materialIndex].materialType == LIGHT_MATERIAL;
+}
+
+vec3 triIntersect( in vec3 ro, in vec3 rd, triangle tri, inout vec3 n )
 {
-    vec3 a = v0 - v1;
-    vec3 b = v2 - v0;
-    vec3 p = v0 - ro;
+    vec3 a = tri.v0 - tri.v1;
+    vec3 b = tri.v2 - tri.v0;
+    vec3 p = tri.v0 - ro;
     n = cross( b, a );
-    if(dot(rd,n) > 0) return vec3(-1, -1, -1);
+
     vec3 q = cross( p, rd );
 
     float idet = 1.0/dot( rd, n );
@@ -225,8 +256,6 @@ vec3 triIntersect( in vec3 ro, in vec3 rd, in vec3 v0, in vec3 v1, in vec3 v2, i
     float v = dot( q, a )*idet;
     float t = dot( n, p )*idet;
 
-    if( u<0.0 || u>1.0 || v<0.0 || (u+v)>1.0 ) t = -1.0;
-    
     return vec3( t, u, v );
 }
 
@@ -234,14 +263,16 @@ vec3 triIntersect( in vec3 ro, in vec3 rd, in vec3 v0, in vec3 v1, in vec3 v2, i
 bool hit_triangle(int triangle_index, ray r, float tMin, float tMax, inout hit_record rec) {
     triangle t = triangles[triangle_index];
     vec3 n = vec3(0,0,0);
-    vec3 hit = triIntersect(r.origin, r.dir, t.v0, t.v1, t.v2, n);
-    if (hit.x != -1 ) {
+    vec3 hit = triIntersect(r.origin, r.dir, t, n);
+    if (!( hit.y<0.0 || hit.y>1.0 || hit.z<0.0 || (hit.y+hit.z)>1.0 )) {
         rec.p = r.origin + hit.x * r.dir;
-        rec.normal = normalize(n);
-        rec.p += rec.normal*0.001;
+        rec.normal =  normalize(n);
+        rec.backFaceInt = dot(r.dir,rec.normal) > 0 ? 1 : 0;
+        rec.normal *=  1 - 2 * rec.backFaceInt;
+        //rec.p +=  rec.normal*0.0001;
         rec.t = hit.x;
         rec.materialIndex = t.materialIndex;
-        return true && (hit.x >= tMin && hit.x <= tMax);
+        return hit.x > tMin && hit.x < tMax;
     }
     return false;
 }
@@ -316,7 +347,7 @@ vec3 ray_color(ray r) {
     vec3 final_color = vec3(1.0);
     ray current_ray = {r.origin, r.dir};
     
-    int bounces = 3;
+    int bounces = 4;
     for (int i = 0; i< bounces; i++) {
         if (hit_triangle_list0(current_ray, rec)) {
             vec3 albedo;
@@ -328,9 +359,9 @@ vec3 ray_color(ray r) {
             final_color *= albedo * rec.scatterPdf / rec.samplePdf;
             
         } else {
-            //final_color *= 0.0;
-            float t = 0.5*(unit_direction.y + 1.0);
-            final_color *= (1.0-t)*vec3(1.0, 1.0, 1.0) + t*vec3(1.0, 0.1, 1.0);
+            final_color *= 0.0;
+            //float t = 0.5*(unit_direction.y + 1.0);
+            //final_color *= (1.0-t)*vec3(1.0, 1.0, 1.0) + t*vec3(1.0, 0.1, 1.0);
             break;
 
         }
@@ -377,4 +408,3 @@ void main()
 
     imageStore(img, ivec2(gl_GlobalInvocationID.xy), to_write);
 }
-

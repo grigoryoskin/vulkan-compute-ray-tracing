@@ -10,8 +10,12 @@
  * Geometry and material objects to be used on GPU. To minimize data size integer links are used.
  */
 namespace GpuModel {
+    enum MaterialType {
+        LightSource, Lambertian, Metal, Glass
+    };
+
     struct Material {
-        alignas(4) bool emits;
+        alignas(4) MaterialType type;
         alignas(16) glm::vec3 albedo;
     };
     

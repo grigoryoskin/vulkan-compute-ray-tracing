@@ -38,21 +38,27 @@ namespace GpuModel
 
         Scene(std::string path_prefix)
         {
-            Material gray{false, glm::vec3(0.3f, 0.3f, 0.3f)};
-            Material red{false, glm::vec3(0.9f, 0.1f, 0.1f)};
-            Material green{false, glm::vec3(0.1f, 0.9f, 0.1f)};
-            Material whiteLight{true, glm::vec3(2.0f, 2.0f, 2.0f)};
+            Material gray{MaterialType::Lambertian, glm::vec3(0.3f, 0.3f, 0.3f)};
+            Material red{MaterialType::Lambertian, glm::vec3(0.9f, 0.1f, 0.1f)};
+            Material green{MaterialType::Lambertian, glm::vec3(0.1f, 0.9f, 0.1f)};
+            Material whiteLight{MaterialType::LightSource, glm::vec3(2.0f, 2.0f, 2.0f)};
+            Material metal{MaterialType::Metal, glm::vec3(1.0f, 1.0f, 1.0f)};
+            Material glass{MaterialType::Glass, glm::vec3(1.0f, 1.0f, 1.0f)};
+
             materials.push_back(gray);
             materials.push_back(red);
             materials.push_back(green);
             materials.push_back(whiteLight);
+            materials.push_back(metal);
+            materials.push_back(glass);
+
 
             std::vector<Bvh::Object0> objects;
             Mesh floor(path_prefix + "/models/doge_scene/floor.obj");
             std::vector<Triangle> floorTriangles = getTriangles(floor, 0);
             //Mesh doge(path_prefix + "/models/doge_scene/buff-doge.obj");
             Mesh doge(path_prefix + "/models/doge_scene/box1.obj");
-            std::vector<Triangle> dogeTriangles = getTriangles(doge, 0);
+            std::vector<Triangle> dogeTriangles = getTriangles(doge, 4);
             //Mesh cheems(path_prefix + "/models/doge_scene/cheems.obj");
             Mesh cheems(path_prefix + "/models/doge_scene/box2.obj");
             std::vector<Triangle> cheemsTriangles = getTriangles(cheems, 0);
@@ -82,7 +88,7 @@ namespace GpuModel
             {
                 Triangle t = triangles[i];
                 objects.push_back({i, t});
-                if (materials[t.materialIndex].emits)
+                if (materials[t.materialIndex].type == MaterialType::LightSource)
                 {
                     float area = glm::length(glm::cross(t.v0, t.v1)) * 0.5f;
                     lights.push_back({i, area});

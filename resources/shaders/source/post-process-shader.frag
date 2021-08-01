@@ -61,7 +61,9 @@ vec4 smartDeNoise(sampler2D tex, vec2 uv, float sigma, float kSigma, float thres
 
 void main() {
     float t = 0.5;
-    vec4 fragCol = t * smartDeNoise(texSampler, fragTexCoord, 2.0, 2.0, .05) + (1-t)*texture(texSampler, fragTexCoord); 
+    //vec4 fragCol = t * smartDeNoise(texSampler, fragTexCoord, 2.0, 2.0, .05) + (1-t)*texture(texSampler, fragTexCoord); 
+    vec4 fragCol = texture(texSampler, fragTexCoord); 
+
     float gamma = 2.2;
     outColor = vec4(pow(fragCol.rgb, vec3(1.0/gamma)), 1.0);
     //outColor = fragCol;;
