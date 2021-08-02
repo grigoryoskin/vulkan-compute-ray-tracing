@@ -2,7 +2,7 @@
 
 <img width="500" alt="Screen Shot 2021-08-01 at 18 36 16" src="https://user-images.githubusercontent.com/44236259/127766493-e2402bde-48ca-462a-8110-d849151e9d18.png">
 
-![ezgif-7-230b5890f049](https://user-images.githubusercontent.com/44236259/127769807-562a88c4-c2f0-4af0-bc80-f2a3425f143a.gif)
+![ezgif-7-7a97c6e30f17](https://user-images.githubusercontent.com/44236259/127881165-f86d19b0-65f0-4b07-81e6-2ff1b92eea1e.gif)
 
 Ray tracer loosely based on [raytracing in one weekend series](https://raytracing.github.io), adapted for real time rendering on GPU.
 
