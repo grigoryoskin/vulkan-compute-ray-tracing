@@ -26,6 +26,11 @@ namespace GpuModel {
         alignas(4)  uint materialIndex;
     };
 
+    struct Sphere {
+        alignas(16) glm::vec4 s;
+        alignas(4)  uint materialIndex;
+    };
+
     // Node in a non recursive BHV for use on GPU.
     struct BvhNode {
         alignas(16) glm::vec3 min;

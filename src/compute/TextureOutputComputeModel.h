@@ -42,6 +42,8 @@ public:
     VulkanMemory::VulkanBuffer<GpuModel::Material> materialBuffer;
     VulkanMemory::VulkanBuffer<GpuModel::BvhNode> bvhNodeBuffer;
     VulkanMemory::VulkanBuffer<GpuModel::Light> lightsBuffer;
+    VulkanMemory::VulkanBuffer<GpuModel::Sphere> spheresBuffer;
+
 
     GpuModel::Scene *scene;
     void init(VulkanSwapchain &swapchainContext)
@@ -98,7 +100,8 @@ public:
         materialBuffer.destroy();
         bvhNodeBuffer.destroy();
         lightsBuffer.destroy();
-
+        spheresBuffer.destroy();
+        
         vkDestroySampler(VulkanGlobal::context.device, textureSampler, nullptr);
         vkDestroyDescriptorPool(VulkanGlobal::context.device, descriptorPool, nullptr);
     }
@@ -135,11 +138,12 @@ private:
         materialBuffer.create(scene->materials, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
         bvhNodeBuffer.create(scene->bvhNodes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
         lightsBuffer.create(scene->lights, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+        spheresBuffer.create(scene->spheres, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
     }
 
     void initDescriptorPool(uint32_t descriptorSetsSize)
     {
-        std::array<VkDescriptorPoolSize, 6> poolSizes{};
+        std::array<VkDescriptorPoolSize, 7> poolSizes{};
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         poolSizes[0].descriptorCount = descriptorSetsSize;
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -152,7 +156,9 @@ private:
         poolSizes[4].descriptorCount = descriptorSetsSize;
         poolSizes[5].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         poolSizes[5].descriptorCount = descriptorSetsSize;
-
+        poolSizes[6].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        poolSizes[6].descriptorCount = descriptorSetsSize;
+        
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -213,7 +219,12 @@ private:
             lightsBufferInfo.offset = 0;
             lightsBufferInfo.range = sizeof(GpuModel::Light) * scene->lights.size();
 
-            std::array<VkWriteDescriptorSet, 6> descriptorWrites{};
+            VkDescriptorBufferInfo spheresBufferInfo{};
+            spheresBufferInfo.buffer = spheresBuffer.buffer;
+            spheresBufferInfo.offset = 0;
+            spheresBufferInfo.range = sizeof(GpuModel::Sphere) * scene->spheres.size();
+
+            std::array<VkWriteDescriptorSet, 7> descriptorWrites{};
 
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[0].dstSet = descriptorSets[i];
@@ -261,6 +272,14 @@ private:
             descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             descriptorWrites[5].descriptorCount = 1;
             descriptorWrites[5].pBufferInfo = &lightsBufferInfo;
+
+            descriptorWrites[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[6].dstSet = descriptorSets[i];
+            descriptorWrites[6].dstBinding = 6;
+            descriptorWrites[6].dstArrayElement = 0;
+            descriptorWrites[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[6].descriptorCount = 1;
+            descriptorWrites[6].pBufferInfo = &spheresBufferInfo;
 
             vkUpdateDescriptorSets(VulkanGlobal::context.device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
         }

@@ -71,13 +71,21 @@ namespace VulkanDescriptorSet
         lightsLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
         lightsLayoutBinding.pImmutableSamplers = nullptr; // Optional
 
-        std::array<VkDescriptorSetLayoutBinding, 6> bindings = {
+        VkDescriptorSetLayoutBinding spheresLayoutsBinding{};
+        spheresLayoutsBinding.binding = 6;
+        spheresLayoutsBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        spheresLayoutsBinding.descriptorCount = 1;
+        spheresLayoutsBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        spheresLayoutsBinding.pImmutableSamplers = nullptr; // Optional
+
+        std::array<VkDescriptorSetLayoutBinding, 7> bindings = {
             samplerLayoutBinding,
             uboLayoutBinding,
             triangleBufferLayoutBinding,
             materialBufferLayoutBinding,
             aabbBufferLayoutBinding,
-            lightsLayoutBinding};
+            lightsLayoutBinding,
+            spheresLayoutsBinding};
             
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;

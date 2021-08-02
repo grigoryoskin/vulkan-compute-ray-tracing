@@ -26,6 +26,11 @@ struct light {
     float area;
 };
 
+struct sphere {
+    vec4 s;
+    uint materialIndex;
+};
+
 struct bvhNode {
     vec3 min;
     vec3 max;
@@ -73,6 +78,10 @@ layout(binding = 4) readonly buffer AabbBufferObject {
 
 layout(binding = 5) readonly buffer LightsBufferObject {
     light[] lights;
+ };
+
+ layout(binding = 6) readonly buffer SpheresBufferObject {
+    sphere[] spheres;
  };
 
 const float pi = 3.1415926535897932385;
@@ -259,6 +268,35 @@ vec3 triIntersect( in vec3 ro, in vec3 rd, triangle tri, inout vec3 n )
     return vec3( t, u, v );
 }
 
+bool hit_sphere(int sphere_index, ray r, float tMin, float tMax, inout hit_record rec) {
+    vec3 center = spheres[sphere_index].s.xyz;
+    float radius = spheres[sphere_index].s.w;
+
+    float dir_l = r.dir.length();
+    
+    vec3 oc = r.origin - center;
+    float a = dot(r.dir, r.dir);
+    float half_b = dot(oc, r.dir);
+    float c = dot(oc, oc) - radius*radius;
+
+    float discriminant = half_b*half_b - a*c;
+    if (discriminant < 0) return false;
+    float sqrtd = sqrt(discriminant);
+    rec.backFaceInt = 0;
+    // Find the nearest root that lies in the acceptable range.
+    float root = (-half_b - sqrtd) / a;
+    if (root < tMin || tMax < root) {
+        root = (-half_b + sqrtd) / a;
+        rec.backFaceInt = 1;
+        if (root < tMin || tMax < root)
+            return false;
+    }
+    rec.t = root;
+    rec.p = ray_at(r, rec.t);
+    rec.normal = (1 - 2 * rec.backFaceInt)*(rec.p - center) / radius;
+    rec.materialIndex = spheres[sphere_index].materialIndex;
+    return true;
+}
 
 bool hit_triangle(int triangle_index, ray r, float tMin, float tMax, inout hit_record rec) {
     triangle t = triangles[triangle_index];
@@ -277,7 +315,7 @@ bool hit_triangle(int triangle_index, ray r, float tMin, float tMax, inout hit_r
     return false;
 }
 
-bool hit_triangle_list0(ray r, inout hit_record rec) {
+bool hit_scene(ray r, inout hit_record rec) {
     float t_min = 0.001;
     float t_max = 10000;
 
@@ -286,6 +324,15 @@ bool hit_triangle_list0(ray r, inout hit_record rec) {
     float closest_so_far = t_max;
     for (int i = 0; i<triangles.length(); i++) {
         if (hit_triangle(i, r, t_min, closest_so_far, temp_rec)) {
+            hit_anything = true;
+            closest_so_far = temp_rec.t;
+            rec = temp_rec;
+        }
+    }
+    closest_so_far = t_max;
+
+    for (int j = 0; j<spheres.length(); j++) {
+        if (hit_sphere(j, r, t_min, closest_so_far, temp_rec)) {
             hit_anything = true;
             closest_so_far = temp_rec.t;
             rec = temp_rec;
@@ -306,6 +353,8 @@ vec2 intersectAABB(ray r, vec3 boxMin, vec3 boxMax) {
     return vec2(tNear, tFar);
 }
 
+// Works only for triangles, no spheres yet.
+// TODO: extend for spheres.
 bool hit_bvh(ray r, inout hit_record rec) {
     float tmin = 0.01;
     
@@ -349,7 +398,7 @@ vec3 ray_color(ray r) {
     
     int bounces = 4;
     for (int i = 0; i< bounces; i++) {
-        if (hit_triangle_list0(current_ray, rec)) {
+        if (hit_scene(current_ray, rec)) {
             vec3 albedo;
             bool emits = scatter(current_ray, rec, albedo, current_ray);
             if (emits) {

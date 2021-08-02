@@ -132,6 +132,8 @@ namespace Bvh
         return a.index < b.index;
     }
 
+    // Works only for triangles, no spheres yet.
+    // TODO: extend for spheres.
     std::vector<BvhNode0> createBvh(const std::vector<Object0> &srcObjects)
     {
         std::vector<BvhNode0> output;

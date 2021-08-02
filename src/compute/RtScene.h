@@ -32,6 +32,7 @@ namespace GpuModel
     struct Scene
     {
         std::vector<Triangle> triangles;
+        std::vector<Sphere> spheres;
         std::vector<Material> materials;
         std::vector<Light> lights;
         std::vector<BvhNode> bvhNodes;
@@ -73,7 +74,7 @@ namespace GpuModel
             Mesh light(path_prefix + "/models/doge_scene/light.obj");
             std::vector<Triangle> lightTriangles = getTriangles(light, 3);
 
-            triangles.insert(triangles.end(), dogeTriangles.begin(), dogeTriangles.end());
+            //triangles.insert(triangles.end(), dogeTriangles.begin(), dogeTriangles.end());
             triangles.insert(triangles.end(), cheemsTriangles.begin(), cheemsTriangles.end());
             triangles.insert(triangles.end(), rightWallTriangles.begin(), rightWallTriangles.end());
             triangles.insert(triangles.end(), leftWallTriangles.begin(), leftWallTriangles.end());
@@ -96,6 +97,8 @@ namespace GpuModel
             }
 
             std::cout << "num lights " << lights.size() << std::endl;
+
+            spheres.push_back({glm::vec4(0.6, 1, -1, 0.6), 5});
 
             std::vector<Bvh::BvhNode0> nodes0 = Bvh::createBvh(objects);
             bvhNodes = createGpuBvh(nodes0);
