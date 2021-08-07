@@ -24,7 +24,9 @@ WIP
 - [X] Glass materials.
 - [ ] Fog.
 - [ ] PBR materials.
-- [X] Light sampling
+- [X] Light sampling.
+- [X] Render spheres.
+- [ ] Include spheres in bhv.
 - [ ] Try "roped" bvh to see how it improves performance.
 
 ## How to run
