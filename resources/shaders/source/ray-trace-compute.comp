@@ -363,6 +363,11 @@ bool hit_bvh(ray r, inout hit_record rec) {
     
     nodeStack[stackIndex] = 0;
     stackIndex++;
+
+    bool hit_anything = false;
+    float closest_so_far = 1000;
+    hit_record temp_rec;
+
     while (stackIndex>0 && stackIndex<16) {
         int currentNode = nodeStack[stackIndex-1];
         stackIndex = stackIndex-1;
@@ -374,8 +379,11 @@ bool hit_bvh(ray r, inout hit_record rec) {
             bool leaf = bvh[currentNode].objectIndex != -1;
 
             if(leaf) {
-                if(hit_triangle(bvh[currentNode].objectIndex, r, tmin, tIntersect.y + 0.1, rec)) {
-                    return true;
+                if(hit_triangle(bvh[currentNode].objectIndex, r, tmin, closest_so_far, temp_rec)) {
+                    hit_anything = true;
+                    closest_so_far = rec.t;
+                    rec = temp_rec;
+                    //return true;
                 }
             } 
 
@@ -386,7 +394,7 @@ bool hit_bvh(ray r, inout hit_record rec) {
         } 
     }
     
-    return false;
+    return hit_anything;
 }
 
 vec3 ray_color(ray r) {
@@ -398,7 +406,7 @@ vec3 ray_color(ray r) {
     
     int bounces = 4;
     for (int i = 0; i< bounces; i++) {
-        if (hit_scene(current_ray, rec)) {
+        if (hit_bvh(current_ray, rec)) {
             vec3 albedo;
             bool emits = scatter(current_ray, rec, albedo, current_ray);
             if (emits) {

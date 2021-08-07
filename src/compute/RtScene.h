@@ -57,11 +57,11 @@ namespace GpuModel
             std::vector<Bvh::Object0> objects;
             Mesh floor(path_prefix + "/models/doge_scene/floor.obj");
             std::vector<Triangle> floorTriangles = getTriangles(floor, 0);
-            //Mesh doge(path_prefix + "/models/doge_scene/buff-doge.obj");
-            Mesh doge(path_prefix + "/models/doge_scene/box1.obj");
+            Mesh doge(path_prefix + "/models/doge_scene/buff-doge.obj");
+            //Mesh doge(path_prefix + "/models/doge_scene/box1.obj");
             std::vector<Triangle> dogeTriangles = getTriangles(doge, 4);
-            //Mesh cheems(path_prefix + "/models/doge_scene/cheems.obj");
-            Mesh cheems(path_prefix + "/models/doge_scene/box2.obj");
+            Mesh cheems(path_prefix + "/models/doge_scene/cheems.obj");
+            //Mesh cheems(path_prefix + "/models/doge_scene/box2.obj");
             std::vector<Triangle> cheemsTriangles = getTriangles(cheems, 0);
             Mesh rightWall(path_prefix + "/models/doge_scene/right.obj");
             std::vector<Triangle> rightWallTriangles = getTriangles(rightWall, 1);
@@ -74,7 +74,7 @@ namespace GpuModel
             Mesh light(path_prefix + "/models/doge_scene/light.obj");
             std::vector<Triangle> lightTriangles = getTriangles(light, 3);
 
-            //triangles.insert(triangles.end(), dogeTriangles.begin(), dogeTriangles.end());
+            triangles.insert(triangles.end(), dogeTriangles.begin(), dogeTriangles.end());
             triangles.insert(triangles.end(), cheemsTriangles.begin(), cheemsTriangles.end());
             triangles.insert(triangles.end(), rightWallTriangles.begin(), rightWallTriangles.end());
             triangles.insert(triangles.end(), leftWallTriangles.begin(), leftWallTriangles.end());

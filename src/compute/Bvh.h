@@ -83,7 +83,7 @@ namespace Bvh
 
         glm::vec3 big(fmax(fmax(t.v0.x, t.v1.x), t.v2.x),
                       fmax(fmax(t.v0.y, t.v1.y), t.v2.y),
-                      fmax(fmax(t.v0.y, t.v1.y), t.v2.y));
+                      fmax(fmax(t.v0.z, t.v1.z), t.v2.z));
 
         return {small - eps, big + eps};
     }
@@ -133,7 +133,7 @@ namespace Bvh
     }
 
     // Works only for triangles, no spheres yet.
-    // TODO: extend for spheres.
+// TODO: extend for spheres.
     std::vector<BvhNode0> createBvh(const std::vector<Object0> &srcObjects)
     {
         std::vector<BvhNode0> output;
