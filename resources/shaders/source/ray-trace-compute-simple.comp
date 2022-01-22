@@ -9,6 +9,7 @@ layout(binding = 0) uniform UniformBufferObject {
     vec3 camPos;
     float time;
     uint currentSample;
+    uint numTriangles;
 } ubo;
 
 layout(set = 0, binding = 1, rgba8) uniform image2D img;
@@ -50,102 +51,15 @@ struct hit_record {
     vec3 normal;
     uint materialIndex;
     float t;
-    // integer to decrease branches.
+    // representing whetether backface or not with an integer to decrease branches.
     int backFaceInt;
-    // PDF of scattering in given direction due to material properties.
-    float scatterPdf;
-    // PDF of sampling in given direction.
-    float samplePdf;
-
 };
-
-vec3 randomOnATriangle(uint triangleIndex) {
-    float s = random();
-    float t = random();
-
-    vec3 v01 = - triangles[triangleIndex].v0 + triangles[triangleIndex].v1;
-    vec3 v02 = - triangles[triangleIndex].v0 + triangles[triangleIndex].v2;
-    return triangles[triangleIndex].v0 + s * v01 + t * v02;
-}
-
-vec3 sampleLight(vec3 p, inout float pdf, inout float lightCosine) {
-    int lightIndex = int(floor(lights.length() * random()));
-    vec3 onLight = randomOnATriangle(lights[lightIndex].triangleIndex);
-    vec3 toLight = onLight - p;
-    float distanceSquared = dot(toLight, toLight);
-    toLight = normalize(toLight);
-    lightCosine = abs(toLight.y);
-
-    // This assumes that all lights have the same area. 
-    // TODO: Calculate probability for arbitrary light area.
-    pdf = distanceSquared / (lights.length() * lightCosine * lights[lightIndex].area);
-
-    return toLight;
-}
-
-vec3 sampleLambertian(vec3 normal, inout float pdf) {
-    onb uvw = Onb(normal);
-    vec3 randomCos = random_cosine_direction();
-    vec3 randomCosScattered = normalize(onbLocal(randomCos, uvw));
-    float cosine = dot(normalize(normal), randomCosScattered);
-    pdf = max(0.01, cosine)/pi;
-    
-    return randomCosScattered;
-}
-
-vec3 sampleMetal(vec3 I, vec3 normal, inout float pdf) {
-    pdf = 1;
-    return reflect(I, normal);
-}
-
-vec3 sampleGlass(vec3 I, hit_record rec, inout float pdf) {
-    pdf = 1;
-    float ir = 1.5;
-    float refraction_ratio = (1 - rec.backFaceInt) * 1.0/ir + rec.backFaceInt * ir; 
-    vec3 i = normalize(I);
-    float cos_theta = min(dot(-i, rec.normal), 1.0);
-    float sin_theta = sqrt(1.0 - cos_theta*cos_theta);
-    float t = floor(clamp(refraction_ratio * sin_theta, 0, 1));
-
-    return t*reflect(i, rec.normal) + (1-t)*refract(i, rec.normal, refraction_ratio);
-}
 
 bool scatter(ray r_in, inout hit_record rec, inout vec3 albedo, inout ray scattered) {    
     albedo = materials[rec.materialIndex].albedo;
-    //float lightSamplePdf;
 
-    float materialSamplePdf;
-    vec3 materialSample;
-
-    if(materials[rec.materialIndex].materialType == LAMBERTIAN_MATERIAL) {
-        materialSample = sampleLambertian(rec.normal, materialSamplePdf);
-    }
-    else if(materials[rec.materialIndex].materialType == METAL_MATERIAL) {
-        materialSample = sampleMetal(r_in.dir, rec.normal, materialSamplePdf);
-    }
-    else if(materials[rec.materialIndex].materialType == GLASS_MATERIAL) {
-        materialSample = sampleGlass(r_in.dir, rec, materialSamplePdf);
-        albedo = vec3(1.0);
-    }
-    float lightSamplePdf = materialSamplePdf; 
-    vec3 finalSample = materialSample;
-
-    if (random() < 0.5 && materials[rec.materialIndex].materialType == LAMBERTIAN_MATERIAL) {
-        // sample light
-        float lightCosine;
-        finalSample = sampleLight(rec.p, lightSamplePdf, lightCosine);
-
-        if(abs(lightCosine) < 0.001) {
-            finalSample = materialSample;
-            lightSamplePdf = materialSamplePdf;
-        }
-    }
-
-    scattered = ray(rec.p, finalSample);
+    scattered = ray(rec.p, normalize(random_in_hemisphere(rec.normal)));
     
-    rec.samplePdf = 0.5 * materialSamplePdf + 0.5 *lightSamplePdf;
-    rec.scatterPdf = materialSamplePdf;
-
     return materials[rec.materialIndex].materialType == LIGHT_MATERIAL;
 }
 
@@ -167,36 +81,6 @@ vec3 triIntersect( in vec3 ro, in vec3 rd, triangle tri, inout vec3 n )
     return vec3( t, u, v );
 }
 
-bool hit_sphere(int sphere_index, ray r, float tMin, float tMax, inout hit_record rec) {
-    vec3 center = spheres[sphere_index].s.xyz;
-    float radius = spheres[sphere_index].s.w;
-
-    float dir_l = r.dir.length();
-    
-    vec3 oc = r.origin - center;
-    float a = dot(r.dir, r.dir);
-    float half_b = dot(oc, r.dir);
-    float c = dot(oc, oc) - radius*radius;
-
-    float discriminant = half_b*half_b - a*c;
-    if (discriminant < 0) return false;
-    float sqrtd = sqrt(discriminant);
-    rec.backFaceInt = 0;
-    // Find the nearest root that lies in the acceptable range.
-    float root = (-half_b - sqrtd) / a;
-    if (root < tMin || tMax < root) {
-        root = (-half_b + sqrtd) / a;
-        rec.backFaceInt = 1;
-        if (root < tMin || tMax < root)
-            return false;
-    }
-    rec.t = root;
-    rec.p = ray_at(r, rec.t);
-    rec.normal = (1 - 2 * rec.backFaceInt)*(rec.p - center) / radius;
-    rec.materialIndex = spheres[sphere_index].materialIndex;
-    return true;
-}
-
 bool hit_triangle(int triangle_index, ray r, float tMin, float tMax, inout hit_record rec) {
     triangle t = triangles[triangle_index];
     vec3 n = vec3(0,0,0);
@@ -214,6 +98,7 @@ bool hit_triangle(int triangle_index, ray r, float tMin, float tMax, inout hit_r
     return false;
 }
 
+// Hit scene without bvh.
 bool hit_scene(ray r, inout hit_record rec) {
     float t_min = 0.001;
     float t_max = 10000;
@@ -221,17 +106,8 @@ bool hit_scene(ray r, inout hit_record rec) {
     hit_record temp_rec;
     bool hit_anything = false;
     float closest_so_far = t_max;
-    for (int i = 0; i<triangles.length(); i++) {
+    for (int i = 0; i<ubo.numTriangles; i++) {
         if (hit_triangle(i, r, t_min, closest_so_far, temp_rec)) {
-            hit_anything = true;
-            closest_so_far = temp_rec.t;
-            rec = temp_rec;
-        }
-    }
-    closest_so_far = t_max;
-
-    for (int j = 0; j<spheres.length(); j++) {
-        if (hit_sphere(j, r, t_min, closest_so_far, temp_rec)) {
             hit_anything = true;
             closest_so_far = temp_rec.t;
             rec = temp_rec;
@@ -367,6 +243,7 @@ void main()
     ray r = {origin, lower_left_corner + uv.x*horizontal + uv.y*vertical - origin};
     vec3 pixel_color = ray_color(r);
 
+    // Adding current ray color to existing color in the accumulation texture.
     vec4 currentColor = imageLoad(img, ivec2(gl_GlobalInvocationID.xy)).rgba;
     vec4 to_write = (vec4(pixel_color, 1.0) + currentColor*(ubo.currentSample))/(ubo.currentSample + 1);
 

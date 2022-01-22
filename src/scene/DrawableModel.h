@@ -2,40 +2,33 @@
 
 #include <vector>
 #include "../utils/vulkan.h"
-#include "mesh.h"
-#include "../memory/VulkanBuffer.h"
+#include "Mesh.h"
+#include "../memory/Buffer.h"
+#include "Material.h"
 
-class DrawableModel
+namespace mcvkp
 {
-public:
-    Mesh mesh;
-    VulkanMemory::VulkanBuffer<Vertex> vertexBuffer;
-    VulkanMemory::VulkanBuffer<uint32_t> indexBuffer;
 
-    VkDescriptorPool descriptorPool;
-    std::vector<VkDescriptorSet> descriptorSets;
-
-    void drawCommand(VkCommandBuffer &commandBuffer, VkPipelineLayout &pipelineLayout, size_t currentFrame)
+    class DrawableModel
     {
-        VkBuffer vertexBuffers[] = {vertexBuffer.buffer};
-        VkDeviceSize offsets[] = {0};
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-        vkCmdBindIndexBuffer(commandBuffer, indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+    public:
+        DrawableModel(std::shared_ptr<Material> material,
+                      std::string modelPath);
 
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(mesh.indices.size()), 1, 0, 0, 0);
-    }
+        DrawableModel(std::shared_ptr<Material> material,
+                      MeshType type);
 
-protected:
-    VkDescriptorSetLayout *descriptorSetLayout;
+        std::shared_ptr<Material> getMaterial();
+        void drawCommand(VkCommandBuffer &commandBuffer, size_t currentFrame);
 
-    void initVertexBuffer()
-    {
-        vertexBuffer.create(mesh.vertices, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-    }
+    private:
+        std::shared_ptr<Material> m_material;
+        mcvkp::Buffer m_vertexBuffer;
+        mcvkp::Buffer m_indexBuffer;
+        uint32_t m_numIndices;
 
-    void initIndexBuffer()
-    {
-        indexBuffer.create(mesh.indices, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-    }
-};
+        void initVertexBuffer(const Mesh &mesh);
+
+        void initIndexBuffer(const Mesh &mesh);
+    };
+}

@@ -3,20 +3,23 @@
 #include <cstdlib>
 #include <vector>
 #include <array>
+#include <memory>
 #include "utils/vulkan.h"
 #include "app-context/VulkanApplicationContext.h"
-#include "app-context/VulkanGlobal.h"
 #include "app-context/VulkanSwapchain.h"
+#include "app-context/VulkanGlobal.h"
 #include "utils/RootDir.h"
-#include "memory/VulkanBuffer.h"
 #include "utils/glm.h"
 #include "utils/Camera.h"
-#include "scene/mesh.h"
-#include "scene/ScreenQuadModel.h"
-#include "compute/TextureOutputComputeModel.h"
-#include "render-context/PostProcessRenderContext.h"
-#include "pipeline/VulkanPipeline.h"
-#include "pipeline/VulkanDescriptorSet.h"
+#include "scene/Mesh.h"
+#include "scene/Scene.h"
+#include "scene/DrawableModel.h"
+#include "render-context/FlatRenderPass.h"
+#include "render-context/RenderSystem.h"
+#include "scene/ComputeMaterial.h"
+#include "scene/ComputeModel.h"
+#include "ray-tracing/RtScene.h"
+
 // TODO: Organize includes!
 
 const std::string path_prefix = std::string(ROOT_DIR) + "resources/";
@@ -28,8 +31,15 @@ void processInput(GLFWwindow *window);
 float deltaTime = 0.0f; // Time between current frame and last frame
 float lastFrame = 0.0f; // Time of last frame
 Camera camera(glm::vec3(1.8f, 8.6f, 1.1f));
-
 bool hasMoved = false;
+struct UniformBufferObject
+{
+    alignas(16) glm::vec3 camPosition;
+    alignas(4) float time;
+    alignas(4) u_int32_t currentSample;
+    alignas(4) u_int32_t numTriangles;
+};
+
 class HelloComputeApplication
 {
 public:
@@ -41,132 +51,111 @@ public:
     }
 
 private:
-    // Swapchain context - holds swapchain and its images and image views.
-    VulkanSwapchain swapchainContext;
+    std::shared_ptr<GpuModel::Scene> rtScene;
 
-    // Compute model - holds render taget texture, descriptors and pipelines.
-    TextureOutputComputeModel computeModel;
+    std::shared_ptr<mcvkp::ComputeModel> computeModel;
 
-    // Post process render pass, has framebuffer for each swapchain image.
-    PostProcessRenderContext postProcessRenderContext;
+    std::shared_ptr<mcvkp::Scene> postProcessScene;
 
-    // Layout for screen quad. Basically just a texture sampler for acessing rendered image.
-    VkDescriptorSetLayout screenQuadDescriptorLayout;
-    VkPipelineLayout screenQuadPipelineLayout;
-    VkPipeline screenQuadPipeline;
-    //Screen quad model - just a quad covering the screen.
-    ScreenQuadVulkanModel screenQuadModel;
-
-    // Command buffers for graphics.
     std::vector<VkCommandBuffer> commandBuffers;
-    // Command buffers for compute.
-    std::vector<VkCommandBuffer> computeCommandBuffers;
 
-    // Synchronization objects.
     const int MAX_FRAMES_IN_FLIGHT = 2;
 
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
-    std::vector<VkSemaphore> computeSemaphores;
     std::vector<VkFence> inFlightFences;
     std::vector<VkFence> imagesInFlight;
 
     // Initializing layouts and models.
     void initScene()
     {
-        computeModel.init(swapchainContext);
+        using namespace mcvkp;
+        uint32_t descriptorSetsSize = VulkanGlobal::swapchainContext.swapChainImageViews.size();
 
-        VulkanDescriptorSet::screenQuadLayout(screenQuadDescriptorLayout);
+        rtScene = std::make_shared<GpuModel::Scene>();
 
-        VulkanPipeline::createGraphicsPipeline(swapchainContext.swapChainExtent,
-                                               &screenQuadDescriptorLayout,
-                                               postProcessRenderContext.renderPass,
-                                               path_prefix + "/shaders/generated/post-process-vert.spv",
-                                               path_prefix + "/shaders/generated/post-process-frag.spv",
-                                               screenQuadPipelineLayout,
-                                               screenQuadPipeline);
+        // Buffer bundle is an array of buffers, one per each swapchain image/descriptor set.
+        auto uniformBufferBundle = std::make_shared<mcvkp::BufferBundle>(descriptorSetsSize);
+        BufferUtils::createBundle<UniformBufferObject>(uniformBufferBundle.get(), UniformBufferObject(),
+                                                       VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
-        // Creating screen quad and passing color attachment of offscreen render pass as a texture.
-        screenQuadModel.init(&screenQuadDescriptorLayout,
-                             swapchainContext,
-                             &computeModel.targetTexture);
+        auto triangleBufferBundle = std::make_shared<mcvkp::BufferBundle>(descriptorSetsSize);
+        BufferUtils::createBundle<GpuModel::Triangle>(triangleBufferBundle.get(), rtScene->triangles.data(), rtScene->triangles.size(),
+                                                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+        auto materialBufferBundle = std::make_shared<mcvkp::BufferBundle>(descriptorSetsSize);
+        BufferUtils::createBundle<GpuModel::Material>(materialBufferBundle.get(), rtScene->materials.data(), rtScene->materials.size(),
+                                                      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+        auto aabbBufferBundle = std::make_shared<mcvkp::BufferBundle>(descriptorSetsSize);
+        BufferUtils::createBundle<GpuModel::BvhNode>(aabbBufferBundle.get(), rtScene->bvhNodes.data(), rtScene->bvhNodes.size(),
+                                                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+        auto lightsBufferBundle = std::make_shared<mcvkp::BufferBundle>(descriptorSetsSize);
+        BufferUtils::createBundle<GpuModel::Light>(lightsBufferBundle.get(), rtScene->lights.data(), rtScene->lights.size(),
+                                                   VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+        auto spheresBufferBundle = std::make_shared<mcvkp::BufferBundle>(descriptorSetsSize);
+        BufferUtils::createBundle<GpuModel::Sphere>(spheresBufferBundle.get(), rtScene->spheres.data(), rtScene->spheres.size(),
+                                                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+        auto targetTexture = std::make_shared<mcvkp::Image>();
+        mcvkp::ImageUtils::createImage(VulkanGlobal::swapchainContext.swapChainExtent.width,
+                                       VulkanGlobal::swapchainContext.swapChainExtent.height,
+                                       1,
+                                       VK_SAMPLE_COUNT_1_BIT,
+                                       VK_FORMAT_R8G8B8A8_UNORM,
+                                       VK_IMAGE_TILING_OPTIMAL,
+                                       VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+                                       VK_IMAGE_ASPECT_COLOR_BIT,
+                                       VMA_MEMORY_USAGE_GPU_ONLY,
+                                       targetTexture);
+        mcvkp::ImageUtils::transitionImageLayout(targetTexture->image,
+                                                 VK_FORMAT_R8G8B8A8_UNORM,
+                                                 VK_IMAGE_LAYOUT_UNDEFINED,
+                                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                                 1);
+
+        // Uncomment to use a simplified shader.
+        //auto computeMaterial = std::make_shared<ComputeMaterial>(path_prefix + "/shaders/generated/ray-trace-compute-simple.spv");
+        auto computeMaterial = std::make_shared<ComputeMaterial>(path_prefix + "/shaders/generated/ray-trace-compute.spv");
+        computeMaterial->addUniformBufferBundle(uniformBufferBundle, VK_SHADER_STAGE_COMPUTE_BIT);
+        computeMaterial->addStorageImage(targetTexture, VK_SHADER_STAGE_COMPUTE_BIT);
+        computeMaterial->addStorageBufferBundle(triangleBufferBundle, VK_SHADER_STAGE_COMPUTE_BIT);
+        computeMaterial->addStorageBufferBundle(materialBufferBundle, VK_SHADER_STAGE_COMPUTE_BIT);
+        computeMaterial->addStorageBufferBundle(aabbBufferBundle, VK_SHADER_STAGE_COMPUTE_BIT);
+        computeMaterial->addStorageBufferBundle(lightsBufferBundle, VK_SHADER_STAGE_COMPUTE_BIT);
+        computeMaterial->addStorageBufferBundle(spheresBufferBundle, VK_SHADER_STAGE_COMPUTE_BIT);
+        computeModel = std::make_shared<ComputeModel>(computeMaterial);
+
+        postProcessScene = std::make_shared<Scene>(RenderPassType::eFlat);
+
+        auto screenTex = std::make_shared<Texture>(targetTexture);
+        auto screenMaterial = std::make_shared<Material>(
+            path_prefix + "/shaders/generated/post-process-vert.spv",
+            path_prefix + "/shaders/generated/post-process-frag.spv");
+        screenMaterial->addTexture(screenTex, VK_SHADER_STAGE_FRAGMENT_BIT);
+        postProcessScene->addModel(std::make_shared<DrawableModel>(screenMaterial, MeshType::ePlane));
     }
 
     uint32_t currentSample = 0;
     void updateScene(uint32_t currentImage)
     {
-
         float currentTime = (float)glfwGetTime();
         if (hasMoved)
         {
             currentSample = 0;
             hasMoved = false;
         }
-        //std::cout << "Current sample: " << currentSample << std::endl;
-        UniformBufferObject ubo = {camera.Position, currentTime, currentSample};
-        computeModel.updateUniformBuffer(ubo, currentImage);
+        UniformBufferObject ubo = {camera.Position, currentTime, currentSample, (uint32_t)rtScene->triangles.size()};
+
+        auto &allocation = computeModel->getMaterial()->getUniformBufferBundles()[0].data->buffers[currentImage]->allocation;
+        void *data;
+        vmaMapMemory(VulkanGlobal::context.allocator, allocation, &data);
+        memcpy(data, &ubo, sizeof(ubo));
+        vmaUnmapMemory(VulkanGlobal::context.allocator, allocation);
+
         currentSample++;
-    }
-
-    void createComputeCommandBuffers()
-    {
-        computeCommandBuffers.resize(VulkanGlobal::context.swapChainImageCount);
-
-        VkCommandBufferAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.commandPool = VulkanGlobal::context.computeCommandPool;
-        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandBufferCount = (uint32_t)computeCommandBuffers.size();
-
-        for (size_t i = 0; i < computeCommandBuffers.size(); i++)
-        {
-            if (vkAllocateCommandBuffers(VulkanGlobal::context.device, &allocInfo, &computeCommandBuffers[i]) != VK_SUCCESS)
-            {
-                throw std::runtime_error("failed to allocate command buffers!");
-            }
-
-            VkCommandBufferBeginInfo beginInfo{};
-            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-            beginInfo.flags = 0;                  // Optional
-            beginInfo.pInheritanceInfo = nullptr; // Optional
-
-            if (vkBeginCommandBuffer(computeCommandBuffers[i], &beginInfo) != VK_SUCCESS)
-            {
-                throw std::runtime_error("failed to begin recording command buffer!");
-            }
-
-            VkImageMemoryBarrier imageMemoryBarrier = {};
-            imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-            imageMemoryBarrier.image = computeModel.targetTexture.image;
-            imageMemoryBarrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-            imageMemoryBarrier.srcAccessMask = 0;
-            imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-            imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-            vkCmdPipelineBarrier(
-                computeCommandBuffers[i],
-                VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                0,
-                0, nullptr,
-                0, nullptr,
-                1, &imageMemoryBarrier);
-
-            vkCmdBindPipeline(computeCommandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, computeModel.pipeline);
-            vkCmdBindDescriptorSets(computeCommandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, computeModel.pipelineLayout, 0, 1, &computeModel.descriptorSets[i], 0, 0);
-
-            vkCmdDispatch(computeCommandBuffers[i], ceil(computeModel.targetTexture.width / 32.), ceil(computeModel.targetTexture.height / 32.), 1);
-
-            //VulkanImage::cmdBlitTexture(computeCommandBuffers[i], computeModel.targetTexture, screenQuadModel.textureImage);
-
-            if (vkEndCommandBuffer(computeCommandBuffers[i]) != VK_SUCCESS)
-            {
-                throw std::runtime_error("failed to record command buffer!");
-            }
-        }
     }
 
     void createCommandBuffers()
@@ -174,10 +163,11 @@ private:
         commandBuffers.resize(VulkanGlobal::context.swapChainImageCount);
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.commandPool = VulkanGlobal::context.graphicsCommandPool;
+        allocInfo.commandPool = VulkanGlobal::context.commandPool;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
 
+        auto tagetImage = computeModel->getMaterial()->getStorageImages()[0].data;
         if (vkAllocateCommandBuffers(VulkanGlobal::context.device, &allocInfo, commandBuffers.data()) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to allocate command buffers!");
@@ -196,16 +186,37 @@ private:
                 throw std::runtime_error("failed to begin recording command buffer!");
             }
 
-            VkImageMemoryBarrier imageMemoryBarrier = {};
-            imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-            imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageMemoryBarrier.image = computeModel.targetTexture.image;
-            imageMemoryBarrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-            imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-            imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-            imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            // Convert image layout to GENERAL before writing into it in compute shader.
+            VkImageMemoryBarrier computeMemoryBarrier = {};
+            computeMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            computeMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            computeMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+            computeMemoryBarrier.image = tagetImage->image;
+            computeMemoryBarrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            computeMemoryBarrier.srcAccessMask = 0;
+            computeMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+
+            vkCmdPipelineBarrier(
+                commandBuffers[i],
+                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                0,
+                0, nullptr,
+                0, nullptr,
+                1, &computeMemoryBarrier);
+
+            // Bind compute pipeline and dispatch compute command.
+            computeModel->computeCommand(commandBuffers[i], i, tagetImage->width / 32, tagetImage->height / 32, 1);
+
+            // Convert image layout to READ_ONLY_OPTIMAL before reading from it in fragment shader.
+            VkImageMemoryBarrier screenQuadMemoryBarrier = {};
+            screenQuadMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            screenQuadMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+            screenQuadMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            screenQuadMemoryBarrier.image = tagetImage->image;
+            screenQuadMemoryBarrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            screenQuadMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            screenQuadMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
             vkCmdPipelineBarrier(
                 commandBuffers[i],
@@ -214,26 +225,11 @@ private:
                 0,
                 0, nullptr,
                 0, nullptr,
-                1, &imageMemoryBarrier);
+                1, &screenQuadMemoryBarrier);
 
-            std::array<VkClearValue, 2> clearValues{};
-            clearValues[0].color = {1.0f, 0.5f, 1.0f, 1.0f};
-            clearValues[1].depthStencil = {1.0f, 0};
+            // Bind graphics pipeline and dispatch draw command.
+            postProcessScene->writeRenderCommand(commandBuffers[i], i);
 
-            VkRenderPassBeginInfo postProcessRenderPassInfo{};
-            postProcessRenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            postProcessRenderPassInfo.renderPass = postProcessRenderContext.renderPass;
-            postProcessRenderPassInfo.framebuffer = postProcessRenderContext.swapChainFramebuffers[i];
-            postProcessRenderPassInfo.renderArea.offset = {0, 0};
-            postProcessRenderPassInfo.renderArea.extent = swapchainContext.swapChainExtent;
-
-            postProcessRenderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-            postProcessRenderPassInfo.pClearValues = clearValues.data();
-            vkCmdBeginRenderPass(commandBuffers[i], &postProcessRenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-            vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, screenQuadPipeline);
-            screenQuadModel.drawCommand(commandBuffers[i], screenQuadPipelineLayout, i);
-
-            vkCmdEndRenderPass(commandBuffers[i]);
             if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS)
             {
                 throw std::runtime_error("failed to record command buffer!");
@@ -244,10 +240,9 @@ private:
     void createSyncObjects()
     {
         imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        computeSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
         inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-        imagesInFlight.resize(swapchainContext.swapChainImageViews.size());
+        imagesInFlight.resize(VulkanGlobal::swapchainContext.swapChainImageViews.size());
 
         VkSemaphoreCreateInfo semaphoreInfo{};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -260,7 +255,6 @@ private:
         {
             if (vkCreateSemaphore(VulkanGlobal::context.device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
                 vkCreateSemaphore(VulkanGlobal::context.device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(VulkanGlobal::context.device, &semaphoreInfo, nullptr, &computeSemaphores[i]) != VK_SUCCESS ||
                 vkCreateFence(VulkanGlobal::context.device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS)
             {
 
@@ -276,7 +270,7 @@ private:
 
         uint32_t imageIndex;
         VkResult result = vkAcquireNextImageKHR(VulkanGlobal::context.device,
-                                                swapchainContext.swapChain,
+                                                VulkanGlobal::swapchainContext.swapChain,
                                                 UINT64_MAX,
                                                 imageAvailableSemaphores[currentFrame],
                                                 VK_NULL_HANDLE,
@@ -300,29 +294,14 @@ private:
         imagesInFlight[imageIndex] = inFlightFences[currentFrame];
 
         updateScene(imageIndex);
-        /*
-        if (currentSample  > 10 ) {
-            return;
-        }
-        */
-        VkSubmitInfo computeSubmitInfo{};
-        computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        computeSubmitInfo.commandBufferCount = 1;
-        computeSubmitInfo.pCommandBuffers = &computeCommandBuffers[imageIndex];
-        computeSubmitInfo.waitSemaphoreCount = 0;
-
-        VkSemaphore computeSignalSemaphores[] = {computeSemaphores[currentFrame]};
-
-        computeSubmitInfo.signalSemaphoreCount = 1;
-        computeSubmitInfo.pSignalSemaphores = computeSignalSemaphores;
-        vkQueueSubmit(VulkanGlobal::context.computeQueue, 1, &computeSubmitInfo, VK_NULL_HANDLE);
+        vkResetFences(VulkanGlobal::context.device, 1, &inFlightFences[currentFrame]);
 
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-        VkSemaphore renderWaitSemaphores[] = {imageAvailableSemaphores[currentFrame], computeSemaphores[currentFrame]};
+        VkSemaphore renderWaitSemaphores[] = {imageAvailableSemaphores[currentFrame]};
         VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT};
-        submitInfo.waitSemaphoreCount = 2;
+        submitInfo.waitSemaphoreCount = 1;
         submitInfo.pWaitSemaphores = renderWaitSemaphores;
         submitInfo.pWaitDstStageMask = waitStages;
 
@@ -331,8 +310,6 @@ private:
         VkSemaphore renderSignalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = renderSignalSemaphores;
-
-        vkResetFences(VulkanGlobal::context.device, 1, &inFlightFences[currentFrame]);
 
         if (vkQueueSubmit(VulkanGlobal::context.graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS)
         {
@@ -343,7 +320,7 @@ private:
 
         presentInfo.waitSemaphoreCount = 1;
         presentInfo.pWaitSemaphores = renderSignalSemaphores;
-        VkSwapchainKHR swapChains[] = {swapchainContext.swapChain};
+        VkSwapchainKHR swapChains[] = {VulkanGlobal::swapchainContext.swapChain};
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapChains;
         presentInfo.pImageIndices = &imageIndex;
@@ -357,7 +334,7 @@ private:
         }
 
         // Commented this out for playing around with it later :)
-        vkQueueWaitIdle(VulkanGlobal::context.presentQueue);
+        // vkQueueWaitIdle(VulkanGlobal::context.presentQueue);
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
@@ -389,38 +366,19 @@ private:
 
     void initVulkan()
     {
-        swapchainContext.init();
-        postProcessRenderContext.init(&swapchainContext);
-
         initScene();
 
         createCommandBuffers();
-        createComputeCommandBuffers();
         createSyncObjects();
-        glfwSetCursorPosCallback(VulkanGlobal::context.window, mouse_callback);
+        //glfwSetCursorPosCallback(VulkanGlobal::context.window, mouse_callback);
     }
 
     void cleanup()
     {
-        vkQueueWaitIdle(VulkanGlobal::context.graphicsQueue);
-        vkFreeCommandBuffers(VulkanGlobal::context.device, VulkanGlobal::context.graphicsCommandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
-        vkQueueWaitIdle(VulkanGlobal::context.computeQueue);
-        vkFreeCommandBuffers(VulkanGlobal::context.device, VulkanGlobal::context.computeCommandPool, static_cast<uint32_t>(computeCommandBuffers.size()), computeCommandBuffers.data());
-        vkDestroyPipeline(VulkanGlobal::context.device, screenQuadPipeline, nullptr);
-        vkDestroyPipelineLayout(VulkanGlobal::context.device, screenQuadPipelineLayout, nullptr);
-        computeModel.destroy();
-
-        postProcessRenderContext.destroy();
-        swapchainContext.destroy();
-
-        vkDestroyDescriptorSetLayout(VulkanGlobal::context.device, screenQuadDescriptorLayout, nullptr);
-        screenQuadModel.destroy();
-
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
             vkDestroySemaphore(VulkanGlobal::context.device, renderFinishedSemaphores[i], nullptr);
             vkDestroySemaphore(VulkanGlobal::context.device, imageAvailableSemaphores[i], nullptr);
-            vkDestroySemaphore(VulkanGlobal::context.device, computeSemaphores[i], nullptr);
             vkDestroyFence(VulkanGlobal::context.device, inFlightFences[i], nullptr);
         }
 

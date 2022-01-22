@@ -2,104 +2,100 @@
 
 #include "../utils/vulkan.h"
 #include "vk_mem_alloc.h"
-#include <unordered_map>
 #include <optional>
 #include <string>
 #include <vector>
 #include <set>
 
-const std::vector<const char *> validationLayers = {
-    "VK_LAYER_KHRONOS_validation"};
+const std::vector<const char*> validationLayers = {
+    "VK_LAYER_KHRONOS_validation"
+};
 
-const std::vector<const char *> deviceExtensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_portability_subset"};
+const std::vector<const char*> deviceExtensions = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_portability_subset"
+};
 #ifdef NDEBUG
-const bool enableValidationLayers = true;
+    const bool enableValidationLayers = true;
 #else
-const bool enableValidationLayers = true;
+    const bool enableValidationLayers = true;
 #endif
 
-const uint32_t WIDTH = 600;
+const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-struct QueueFamilyIndices
-{
+struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
     std::optional<uint32_t> presentFamily;
-    std::optional<uint32_t> computeFamily;
 
-    bool isComplete()
-    {
-        return graphicsFamily.has_value() && presentFamily.has_value() && computeFamily.has_value();
+    bool isComplete() {
+        return graphicsFamily.has_value() && presentFamily.has_value();
     }
 };
 
-struct SwapChainSupportDetails
-{
+struct SwapChainSupportDetails {
     VkSurfaceCapabilitiesKHR capabilities;
     std::vector<VkSurfaceFormatKHR> formats;
     std::vector<VkPresentModeKHR> presentModes;
 };
 
-class VulkanApplicationContext
-{
-public:
-    GLFWwindow *window;
-    VkInstance instance;
-    VkPhysicalDevice physicalDevice;
-    // Logical device.
-    VkDevice device;
-    VkSurfaceKHR surface;
-    QueueFamilyIndices queueFamilyIndices;
-    VkQueue graphicsQueue;
-    VkQueue computeQueue;
-    VkQueue presentQueue;
-    VmaAllocator allocator;
-    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
-    uint32_t swapChainImageCount;
-    VkCommandPool graphicsCommandPool;
-    VkCommandPool computeCommandPool;
-    VulkanApplicationContext();
+class VulkanApplicationContext {
+    public:
+        GLFWwindow* window;
+        VkInstance instance;
+        VkPhysicalDevice physicalDevice;
+        // Logical device.
+        VkDevice device;
+        VkSurfaceKHR surface;
+        QueueFamilyIndices queueFamilyIndices;
+        VkQueue graphicsQueue;
+        VkQueue presentQueue;
+        VkCommandPool commandPool;
+        VmaAllocator allocator;
+        VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 
-    ~VulkanApplicationContext();
+        uint32_t swapChainImageCount;
+        
+        VulkanApplicationContext() ;
 
-    SwapChainSupportDetails querySwapChainSupport() const;
+        ~VulkanApplicationContext() ;
 
-    VkFormat findSupportedFormat(const std::vector<VkFormat> &candidates,
-                                 VkImageTiling tiling,
-                                 VkFormatFeatureFlags features) const;
+        SwapChainSupportDetails querySwapChainSupport() const;
 
-private:
-    void initWindow();
+        VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
+                                     VkImageTiling tiling, 
+                                     VkFormatFeatureFlags features) const;
+    private:
 
-    void createSurface();
+        void initWindow() ;
 
-    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
+        void createSurface() ;
 
-    SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) const;
+        QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
 
-    bool checkValidationLayerSupport();
+        SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) const;
 
-    void createInstance();
+        bool checkValidationLayerSupport();
 
-    VkSampleCountFlagBits getMaxUsableSampleCount();
+        void createInstance();
 
-    bool checkDeviceExtensionSupport(VkPhysicalDevice device);
+        VkSampleCountFlagBits getMaxUsableSampleCount();
 
-    bool isDeviceSuitable(VkPhysicalDevice device, QueueFamilyIndices indices);
+        bool checkDeviceExtensionSupport(VkPhysicalDevice device);
 
-    void pickPhysicalDevice();
+        bool isDeviceSuitable(VkPhysicalDevice device, QueueFamilyIndices indices);
 
-    void createLogicalDevice();
+        void pickPhysicalDevice();
 
-    void createAllocator();
+        void createLogicalDevice();
 
-    void createCommandPool(uint32_t queueFamilyIndex, VkCommandPool &commandPool);
+        void createAllocator();
 
-    void initSwapchainImageCount();
+        void createCommandPool();
+
+        void initSwapchainImageCount();
+
 };
 
-namespace VulkanGlobal
-{
+namespace VulkanGlobal {
     extern const VulkanApplicationContext context;
 }

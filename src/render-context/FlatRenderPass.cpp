@@ -1,44 +1,53 @@
-#pragma once
-
 #include <iostream>
 #include <vector>
 #include <array>
 #include "../utils/vulkan.h"
+#include "FlatRenderPass.h"
+#include "../app-context/VulkanApplicationContext.h"
+#include "../app-context/VulkanSwapchain.h"
 
-class PostProcessRenderContext
+namespace mcvkp
 {
-public:
-    VkRenderPass renderPass;
-
-    // Since this render pass is presented to the screen we need to be able to render to one framebuffer
-    // while presenting the other.
-    std::vector<VkFramebuffer> swapChainFramebuffers;
-
-    void init(VulkanSwapchain *swapchainContext)
+    std::shared_ptr<VkRenderPass> FlatRenderPass::getBody() 
     {
-        this->swapchainContext = swapchainContext;
+        return m_renderPass;
+    }
+
+    std::shared_ptr<VkFramebuffer> FlatRenderPass::getFramebuffer(size_t index) 
+    {
+        return m_swapChainFramebuffers[index];
+    }
+
+    // This shouldn't be called. Sorry for sloppy OOP.
+    std::shared_ptr<mcvkp::Image> FlatRenderPass::getColorImage()  { return nullptr; }
+
+    FlatRenderPass::FlatRenderPass()
+    {
+        m_renderPass = std::make_shared<VkRenderPass>();
+        for (size_t i = 0; i < VulkanGlobal::swapchainContext.swapChainImageViews.size(); i++)
+        {
+            m_swapChainFramebuffers.push_back(std::make_shared<VkFramebuffer>());
+        }
         createRenderPass();
         createFramebuffers();
     }
 
-    void destroy()
+    FlatRenderPass::~FlatRenderPass()
     {
-        for (size_t i = 0; i < swapChainFramebuffers.size(); i++)
+        std::cout << "Destroying flat pass" << "\n";
+        for (size_t i = 0; i < m_swapChainFramebuffers.size(); i++)
         {
-            vkDestroyFramebuffer(VulkanGlobal::context.device, swapChainFramebuffers[i], nullptr);
+            vkDestroyFramebuffer(VulkanGlobal::context.device, *m_swapChainFramebuffers[i], nullptr);
         }
 
-        vkDestroyRenderPass(VulkanGlobal::context.device, renderPass, nullptr);
+        vkDestroyRenderPass(VulkanGlobal::context.device, *m_renderPass, nullptr);
     }
 
-private:
-    VulkanSwapchain *swapchainContext;
-
-    void createRenderPass()
+    void FlatRenderPass::createRenderPass()
     {
         // Color attachment for a framebuffer.
         VkAttachmentDescription colorAttachment{};
-        colorAttachment.format = swapchainContext->swapChainImageFormat;
+        colorAttachment.format = VulkanGlobal::swapchainContext.swapChainImageFormat;
         colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
         // Clear the frame before render.
         colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -59,7 +68,7 @@ private:
 
         // Attachment for dowsampling the final image.
         VkAttachmentDescription colorAttachmentResolve{};
-        colorAttachmentResolve.format = swapchainContext->swapChainImageFormat;
+        colorAttachmentResolve.format = VulkanGlobal::swapchainContext.swapChainImageFormat;
         colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
         colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -76,7 +85,7 @@ private:
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colorAttachmentRef;
-        //subpass.pResolveAttachments = &colorAttachmentResolveRef;
+        // subpass.pResolveAttachments = &colorAttachmentResolveRef;
 
         std::array<VkAttachmentDescription, 1> attachments = {colorAttachment};
         VkRenderPassCreateInfo renderPassInfo{};
@@ -108,33 +117,33 @@ private:
         renderPassInfo.dependencyCount = 2;
         renderPassInfo.pDependencies = dependencies.data();
 
-        if (vkCreateRenderPass(VulkanGlobal::context.device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS)
+        if (vkCreateRenderPass(VulkanGlobal::context.device, &renderPassInfo, nullptr, m_renderPass.get()) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create render pass!");
         }
     }
 
-    void createFramebuffers()
+    void FlatRenderPass::createFramebuffers()
     {
-        swapChainFramebuffers.resize(swapchainContext->swapChainImageViews.size());
-        for (size_t i = 0; i < swapchainContext->swapChainImageViews.size(); i++)
+        m_swapChainFramebuffers.resize(VulkanGlobal::swapchainContext.swapChainImageViews.size());
+        for (size_t i = 0; i < VulkanGlobal::swapchainContext.swapChainImageViews.size(); i++)
         {
             std::array<VkImageView, 1> attachments = {
-                swapchainContext->swapChainImageViews[i]};
+                VulkanGlobal::swapchainContext.swapChainImageViews[i]};
 
             VkFramebufferCreateInfo framebufferInfo{};
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            framebufferInfo.renderPass = renderPass;
+            framebufferInfo.renderPass = *m_renderPass;
             framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
             framebufferInfo.pAttachments = attachments.data();
-            framebufferInfo.width = swapchainContext->swapChainExtent.width;
-            framebufferInfo.height = swapchainContext->swapChainExtent.height;
+            framebufferInfo.width = VulkanGlobal::swapchainContext.swapChainExtent.width;
+            framebufferInfo.height = VulkanGlobal::swapchainContext.swapChainExtent.height;
             framebufferInfo.layers = 1;
 
-            if (vkCreateFramebuffer(VulkanGlobal::context.device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS)
+            if (vkCreateFramebuffer(VulkanGlobal::context.device, &framebufferInfo, nullptr, m_swapChainFramebuffers[i].get()) != VK_SUCCESS)
             {
                 throw std::runtime_error("failed to create framebuffer!");
             }
         }
     }
-};
+}

@@ -10,8 +10,10 @@
 
 namespace GpuModel
 {
-    std::vector<Triangle> getTriangles(Mesh &mesh, uint materialIndex)
+    std::vector<Triangle> getTriangles(const std::string &path, uint materialIndex)
     {
+        Mesh mesh(path);
+
         std::vector<Triangle> triangles;
         int numTris = mesh.indices.size() / 3;
 
@@ -20,6 +22,7 @@ namespace GpuModel
             int i0 = mesh.indices[3 * i];
             int i1 = mesh.indices[3 * i + 1];
             int i2 = mesh.indices[3 * i + 2];
+
             Triangle t{mesh.vertices[i0].pos, mesh.vertices[i1].pos, mesh.vertices[i2].pos, materialIndex};
             triangles.push_back(t);
         }
@@ -31,14 +34,17 @@ namespace GpuModel
      */
     struct Scene
     {
+        // triangles contain all triangles from all objects in the scene.
         std::vector<Triangle> triangles;
         std::vector<Sphere> spheres;
         std::vector<Material> materials;
         std::vector<Light> lights;
         std::vector<BvhNode> bvhNodes;
 
-        Scene(std::string path_prefix)
+        Scene()
         {
+            const std::string path_prefix = std::string(ROOT_DIR) + "resources/";
+
             Material gray{MaterialType::Lambertian, glm::vec3(0.3f, 0.3f, 0.3f)};
             Material red{MaterialType::Lambertian, glm::vec3(0.9f, 0.1f, 0.1f)};
             Material green{MaterialType::Lambertian, glm::vec3(0.1f, 0.9f, 0.1f)};
@@ -53,26 +59,21 @@ namespace GpuModel
             materials.push_back(metal);
             materials.push_back(glass);
 
-
             std::vector<Bvh::Object0> objects;
-            Mesh floor(path_prefix + "/models/doge_scene/floor.obj");
-            std::vector<Triangle> floorTriangles = getTriangles(floor, 0);
-            Mesh doge(path_prefix + "/models/doge_scene/buff-doge.obj");
-            //Mesh doge(path_prefix + "/models/doge_scene/box1.obj");
-            std::vector<Triangle> dogeTriangles = getTriangles(doge, 4);
-            Mesh cheems(path_prefix + "/models/doge_scene/cheems.obj");
-            //Mesh cheems(path_prefix + "/models/doge_scene/box2.obj");
-            std::vector<Triangle> cheemsTriangles = getTriangles(cheems, 0);
-            Mesh rightWall(path_prefix + "/models/doge_scene/right.obj");
-            std::vector<Triangle> rightWallTriangles = getTriangles(rightWall, 1);
-            Mesh leftWall(path_prefix + "/models/doge_scene/left.obj");
-            std::vector<Triangle> leftWallTriangles = getTriangles(leftWall, 2);
-            Mesh backWall(path_prefix + "/models/doge_scene/back.obj");
-            std::vector<Triangle> backWallTriangles = getTriangles(backWall, 0);
-            Mesh ceil(path_prefix + "/models/doge_scene/ceil.obj");
-            std::vector<Triangle> ceilTriangles = getTriangles(ceil, 0);
-            Mesh light(path_prefix + "/models/doge_scene/light.obj");
-            std::vector<Triangle> lightTriangles = getTriangles(light, 3);
+
+            std::vector<Triangle> floorTriangles = getTriangles(path_prefix + "/models/doge_scene/floor.obj", 0);
+
+            std::vector<Triangle> dogeTriangles = getTriangles(path_prefix + "/models/doge_scene/buff-doge.obj", 0);
+            //std::vector<Triangle> dogeTriangles = getTriangles(path_prefix + "/models/doge_scene/box1.obj", 4);
+
+            //std::vector<Triangle> cheemsTriangles = getTriangles(path_prefix + "/models/doge_scene/box2.obj", 0);
+            std::vector<Triangle> cheemsTriangles = getTriangles(path_prefix + "/models/doge_scene/cheems.obj", 0);
+
+            std::vector<Triangle> rightWallTriangles = getTriangles(path_prefix + "/models/doge_scene/right.obj", 1);
+            std::vector<Triangle> leftWallTriangles = getTriangles(path_prefix + "/models/doge_scene/left.obj", 2);
+            std::vector<Triangle> backWallTriangles = getTriangles(path_prefix + "/models/doge_scene/back.obj", 0);
+            std::vector<Triangle> ceilTriangles = getTriangles(path_prefix + "/models/doge_scene/ceil.obj", 0);
+            std::vector<Triangle> lightTriangles = getTriangles(path_prefix + "/models/doge_scene/light.obj", 3);
 
             triangles.insert(triangles.end(), dogeTriangles.begin(), dogeTriangles.end());
             triangles.insert(triangles.end(), cheemsTriangles.begin(), cheemsTriangles.end());
@@ -82,8 +83,6 @@ namespace GpuModel
             triangles.insert(triangles.end(), ceilTriangles.begin(), ceilTriangles.end());
             triangles.insert(triangles.end(), floorTriangles.begin(), floorTriangles.end());
             triangles.insert(triangles.end(), lightTriangles.begin(), lightTriangles.end());
-
-            std::cout << "num triangles " << triangles.size() << std::endl;
 
             for (uint32_t i = 0; i < triangles.size(); i++)
             {
@@ -96,12 +95,9 @@ namespace GpuModel
                 }
             }
 
-            std::cout << "num lights " << lights.size() << std::endl;
-
             spheres.push_back({glm::vec4(0.6, 1, -1, 0.6), 5});
 
-            std::vector<Bvh::BvhNode0> nodes0 = Bvh::createBvh(objects);
-            bvhNodes = createGpuBvh(nodes0);
+            bvhNodes = Bvh::createBvh(objects);
         }
     };
 }

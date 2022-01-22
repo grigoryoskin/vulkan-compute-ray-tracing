@@ -13,13 +13,13 @@
  */
 namespace Bvh
 {
-    const glm::vec3 eps(0.00001);
+    const glm::vec3 eps(0.0001);
 
     // Axis-aligned bounding box.
     struct Aabb
     {
-        alignas(16) glm::vec3 min;
-        alignas(16) glm::vec3 max;
+        alignas(16) glm::vec3 min = {FLT_MAX, FLT_MAX, FLT_MAX};
+        alignas(16) glm::vec3 max = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
 
         int longestAxis()
         {
@@ -52,40 +52,49 @@ namespace Bvh
         GpuModel::Triangle t;
     };
 
+    // Intermediate BvhNode structure needed for constructing Bvh.
     struct BvhNode0
     {
         Aabb box;
-        // index refers to the index in the final array of nodes.
+        // index refers to the index in the final array of nodes. Used for sorting a flattened Bvh.
         int index = -1;
         int leftNodeIndex = -1;
         int rightNodeIndex = -1;
         std::vector<Object0> objects;
+
+        GpuModel::BvhNode getGpuModel()
+        {
+            bool leaf = leftNodeIndex == -1 && rightNodeIndex == -1;
+
+            GpuModel::BvhNode node;
+            node.min = box.min;
+            node.max = box.max;
+            node.leftNodeIndex = leftNodeIndex;
+            node.rightNodeIndex = rightNodeIndex;
+
+            if (leaf)
+            {
+                node.objectIndex = objects[0].index;
+            }
+
+            return node;
+        }
     };
+
+    bool nodeCompare(BvhNode0 &a, BvhNode0 &b)
+    {
+        return a.index < b.index;
+    }
 
     Aabb surroundingBox(Aabb box0, Aabb box1)
     {
-        glm::vec3 small(fmin(box0.min.x, box1.min.x),
-                        fmin(box0.min.y, box1.min.y),
-                        fmin(box0.min.z, box1.min.z));
-
-        glm::vec3 big(fmax(box0.max.x, box1.max.x),
-                      fmax(box0.max.y, box1.max.y),
-                      fmax(box0.max.z, box1.max.z));
-
-        return {small, big};
+        return {glm::min(box0.min, box1.min), glm::max(box0.max, box1.max)};
     }
 
     Aabb objectBoundingBox(GpuModel::Triangle &t)
     {
-        glm::vec3 small(fmin(fmin(t.v0.x, t.v1.x), t.v2.x),
-                        fmin(fmin(t.v0.y, t.v1.y), t.v2.y),
-                        fmin(fmin(t.v0.z, t.v1.z), t.v2.z));
-
-        glm::vec3 big(fmax(fmax(t.v0.x, t.v1.x), t.v2.x),
-                      fmax(fmax(t.v0.y, t.v1.y), t.v2.y),
-                      fmax(fmax(t.v0.z, t.v1.z), t.v2.z));
-
-        return {small - eps, big + eps};
+        // Need to add eps to correctly construct an AABB for flat objects like planes.
+        return {glm::min(glm::min(t.v0, t.v1), t.v2) - eps, glm::max(glm::max(t.v0, t.v1), t.v2) + eps};
     }
 
     Aabb objectListBoundingBox(std::vector<Object0> &objects)
@@ -127,18 +136,14 @@ namespace Bvh
         return boxCompare(a.t, b.t, 2);
     }
 
-    bool nodeCompare(BvhNode0 &a, BvhNode0 &b)
+    // Since GPU can't deal with tree structures we need to create a flattened BVH.
+    // Stack is used instead of a tree.
+    std::vector<GpuModel::BvhNode> createBvh(const std::vector<Object0> &srcObjects)
     {
-        return a.index < b.index;
-    }
-
-    // Works only for triangles, no spheres yet.
-// TODO: extend for spheres.
-    std::vector<BvhNode0> createBvh(const std::vector<Object0> &srcObjects)
-    {
-        std::vector<BvhNode0> output;
+        std::vector<BvhNode0> intermediate;
         int nodeCounter = 0;
         std::stack<BvhNode0> nodeStack;
+
         BvhNode0 root;
         root.index = nodeCounter;
         root.objects = srcObjects;
@@ -160,9 +165,9 @@ namespace Bvh
             size_t objectSpan = currentNode.objects.size();
             std::sort(currentNode.objects.begin(), currentNode.objects.end(), comparator);
 
-            if (objectSpan == 1)
+            if (objectSpan <= 1)
             {
-                output.push_back(currentNode);
+                intermediate.push_back(currentNode);
                 continue;
             }
             else
@@ -180,7 +185,7 @@ namespace Bvh
 
                 BvhNode0 rightNode;
                 rightNode.index = nodeCounter;
-                for (int i = mid; i < currentNode.objects.size(); i++)
+                for (int i = mid; i < objectSpan; i++)
                 {
                     rightNode.objects.push_back(currentNode.objects[i]);
                 }
@@ -189,40 +194,17 @@ namespace Bvh
 
                 currentNode.leftNodeIndex = leftNode.index;
                 currentNode.rightNodeIndex = rightNode.index;
-                output.push_back(currentNode);
+                intermediate.push_back(currentNode);
             }
         }
-        std::sort(output.begin(), output.end(), nodeCompare);
+        std::sort(intermediate.begin(), intermediate.end(), nodeCompare);
 
-        return output;
-    }
-
-    // Converting bhv to gpu model;
-    std::vector<GpuModel::BvhNode> createGpuBvh(std::vector<BvhNode0> &inputNodes)
-    {
-        std::vector<GpuModel::BvhNode> outputNodes;
-        for (int i = 0; i < inputNodes.size(); i++)
+        std::vector<GpuModel::BvhNode> output;
+        output.reserve(intermediate.size());
+        for (int i = 0; i < intermediate.size(); i++)
         {
-            BvhNode0 iNode = inputNodes[i];
-            int rightChild = iNode.rightNodeIndex;
-            int leftChild = iNode.leftNodeIndex;
-            bool leaf = rightChild == -1 || leftChild == -1;
-
-            GpuModel::BvhNode node;
-            node.min = iNode.box.min;
-            node.max = iNode.box.max;
-            node.leftNodeIndex = leftChild;
-            node.rightNodeIndex = rightChild;
-
-            if (leaf)
-            {
-                node.objectIndex = iNode.objects[0].index;
-            }
-
-            outputNodes.push_back(node);
+            output.push_back(intermediate[i].getGpuModel());
         }
-
-        //createLinks(inputNodes, outputNodes, -1, 0);
-        return outputNodes;
+        return output;
     }
 }
