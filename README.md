@@ -8,19 +8,17 @@ Ray tracer loosely based on [raytracing in one weekend series](https://raytracin
 
 ## How it works.
 Overall project structure comes from my [project template](https://github.com/grigoryoskin/vulkan-project-starter) with some changes to enable compute functionality.
-Compute shader renders the ray traced scene into a texture that gets displayed onto a screen quad with a fragment shader.
-[TextureOutputComputeModel](https://github.com/grigoryoskin/vulkan-compute-ray-tracing/blob/master/src/compute/TextureOutputComputeModel.h) holds the target texture, data buffers, pipeline and descriptor sets.
+
+[Compute shader](https://github.com/grigoryoskin/vulkan-compute-ray-tracing/blob/master/resources/shaders/source/ray-trace-compute.comp) renders the ray traced scene into a texture that gets displayed onto a screen quad with a fragment shader.
+
+[ComputeMaterial](https://github.com/grigoryoskin/vulkan-compute-ray-tracing/blob/master/src/main.cpp#L121) holds the target texture, data buffers, pipeline and descriptor sets.
 
 The [scene](https://github.com/grigoryoskin/vulkan-compute-ray-tracing/blob/master/src/compute/RtScene.h) consists of a an array of materials and an array of triangles. Each triangle holds a reference to the material. Reference is just material's index in the array for ease of use on GPU. 
 
 [BVH](https://github.com/grigoryoskin/vulkan-compute-ray-tracing/blob/master/src/compute/Bvh.h) used to accelarate triangle search is a flat array too, since GPU doesn't support recursion.
 
-Each frame [compute shader](https://github.com/grigoryoskin/vulkan-compute-ray-tracing/blob/master/resources/shaders/source/ray-trace-compute.comp) renders the scene with one sample per pixel and accumulates it in the taget texture.
-
-WIP
-
 ## TODOs:
-- [ ] Fix synchronization issues 😠 
+- [X] Fix synchronization issues 😠 
 - [X] Glass materials.
 - [ ] Fog.
 - [ ] PBR materials.
