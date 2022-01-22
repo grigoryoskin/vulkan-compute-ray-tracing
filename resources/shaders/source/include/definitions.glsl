@@ -25,7 +25,7 @@ struct bvhNode {
     vec3 max;
     int leftNodeIndex;
     int rightNodeIndex;
-    int objectIndexes;
+    int objectIndex;
 };
 
 struct onb {
