@@ -22,6 +22,10 @@
 
 // TODO: Organize includes!
 
+#include <stdint.h>
+
+#define u_int32_t uint32_t
+
 const std::string path_prefix = std::string(ROOT_DIR) + "resources/";
 
 float mouseOffsetX, mouseOffsetY;

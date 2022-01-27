@@ -6,6 +6,10 @@
 #include <algorithm>
 #include "../utils/glm.h"
 
+#include <stdint.h>
+
+#define uint uint32_t
+
 /**
  * Geometry and material objects to be used on GPU. To minimize data size integer links are used.
  */
