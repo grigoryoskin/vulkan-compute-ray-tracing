@@ -29,10 +29,10 @@ The [scene](https://github.com/grigoryoskin/vulkan-compute-ray-tracing/blob/mast
 
 ## How to run
 This is an instruction for mac os, but it should work for other systems too, since all the dependencies come from git submodules and build with cmake.
-1. Download and install [Vulkan SDK] (https://vulkan.lunarg.com)
+1. Download and install [Vulkan SDK] (https://vulkan.lunarg.com). Add $VULKAN_SDK environmental variable.
 2. Pull glfw, glm, stb and obj loader:
 ```
-git submudule init
+git submodule init
 git submodule update
 ```
 3. Create a buld folder and step into it.
