@@ -7,6 +7,8 @@
 #include <vector>
 #include "../app-context/VulkanApplicationContext.h"
 #include "../scene/Mesh.h"
+#include <memory>
+
 
 namespace mcvkp
 {
