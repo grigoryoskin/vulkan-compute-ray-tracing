@@ -5,29 +5,28 @@
 #include "VulkanApplicationContext.h"
 #include "../memory/Image.h"
 
-class VulkanSwapchain {
-    public:
-        VkSwapchainKHR swapChain;
-        std::vector<VkImage> swapChainImages;
-        VkFormat swapChainImageFormat;
-        VkExtent2D swapChainExtent;
-        std::vector<VkImageView> swapChainImageViews;
-        
-        VulkanSwapchain();
-        ~VulkanSwapchain();
+class VulkanSwapchain
+{
+public:
+    VulkanSwapchain();
+    ~VulkanSwapchain();
 
-    private:
-        VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
+    const VkSwapchainKHR &getBody() const;
+    const VkExtent2D &getExtent() const;
+    const VkFormat &getFormat() const;
+    const std::vector<VkImage> &getImages() const;
+    const std::vector<VkImageView> &getImageViews() const;
 
-        VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
+private:
+    void createSwapChain();
 
-        VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
-
-        void createSwapChain();
-
-        void createImageViews();
+private:
+    vkb::Swapchain m_vkbSwapchain;
+    std::vector<VkImage> m_images;
+    std::vector<VkImageView> m_imageViews;
 };
 
-namespace VulkanGlobal {
+namespace VulkanGlobal
+{
     extern const VulkanSwapchain swapchainContext;
 }

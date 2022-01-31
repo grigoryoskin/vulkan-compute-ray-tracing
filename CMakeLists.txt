@@ -24,18 +24,20 @@ include_directories($Vulkan_INCLUDE_DIRS})
 
 # Go to glfw directory and build it using it's own cmake file.
 add_subdirectory(external/glfw)
-
 add_subdirectory(external/obj-loader)
+add_subdirectory(external/vk-bootstrap)
 
 #include_directories will tell the linker to look for header files there.
 include_directories( PUBLIC external/glfw/include
 					 PUBLIC external/glm
 					 PUBLIC external/stb
 					 PUBLIC external/obj-loader
-					 PUBLIC external/memory-allocator-hpp)
+					 PUBLIC external/memory-allocator-hpp
+					 PUBLIC external/vk-bootstrap/src)
 
 target_link_directories(${PROJECT_NAME} PRIVATE external/glfw/src)
+target_link_directories(${PROJECT_NAME} PRIVATE external/vk-bootstrap/src)
 
-set(LIBS Vulkan::Vulkan glfw)
+set(LIBS Vulkan::Vulkan glfw vk-bootstrap)
 
 target_link_libraries(${PROJECT_NAME} ${LIBS})

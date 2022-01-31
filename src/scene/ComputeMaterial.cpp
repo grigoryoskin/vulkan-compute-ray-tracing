@@ -8,7 +8,7 @@ namespace mcvkp
 {
     ComputeMaterial::ComputeMaterial(const std::string &computeShaderPath) : m_computeShaderPath(computeShaderPath)
     {
-        m_descriptorSetsSize = VulkanGlobal::swapchainContext.swapChainImages.size();
+        m_descriptorSetsSize = VulkanGlobal::swapchainContext.getImages().size();
         m_initialized = false;
     }
 
@@ -32,7 +32,7 @@ namespace mcvkp
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &m_descriptorSetLayout;
 
-        if (vkCreatePipelineLayout(VulkanGlobal::context.device, &pipelineLayoutInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS)
+        if (vkCreatePipelineLayout(VulkanGlobal::context.getDevice(), &pipelineLayoutInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create pipeline layout!");
         }
@@ -52,12 +52,12 @@ namespace mcvkp
         computePipelineCreateInfo.flags = 0;
         computePipelineCreateInfo.stage = shaderStageInfo;
 
-        if (vkCreateComputePipelines(VulkanGlobal::context.device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &m_pipeline) != VK_SUCCESS)
+        if (vkCreateComputePipelines(VulkanGlobal::context.getDevice(), VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &m_pipeline) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create graphics pipeline!");
         }
 
-        vkDestroyShaderModule(VulkanGlobal::context.device, shaderModule, nullptr);
+        vkDestroyShaderModule(VulkanGlobal::context.getDevice(), shaderModule, nullptr);
     }
 
     void ComputeMaterial::bind(VkCommandBuffer &commandBuffer, size_t currentFrame)

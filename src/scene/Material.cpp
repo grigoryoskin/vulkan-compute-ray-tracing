@@ -10,22 +10,22 @@ namespace mcvkp
         const std::string &vertexShaderPath,
         const std::string &fragmentShaderPath) : m_fragmentShaderPath(fragmentShaderPath), m_vertexShaderPath(vertexShaderPath), m_initialized(false)
     {
-        m_descriptorSetsSize = VulkanGlobal::swapchainContext.swapChainImages.size();
+        m_descriptorSetsSize = VulkanGlobal::swapchainContext.getImages().size();
     }
 
     Material::Material()
     {
-        m_descriptorSetsSize = VulkanGlobal::swapchainContext.swapChainImages.size();
+        m_descriptorSetsSize = VulkanGlobal::swapchainContext.getImages().size();
     }
 
     Material::~Material()
     {
         std::cout << "Destroying material"
                   << "\n";
-        vkDestroyDescriptorSetLayout(VulkanGlobal::context.device, m_descriptorSetLayout, nullptr);
-        vkDestroyPipeline(VulkanGlobal::context.device, m_pipeline, nullptr);
-        vkDestroyPipelineLayout(VulkanGlobal::context.device, m_pipelineLayout, nullptr);
-        vkDestroyDescriptorPool(VulkanGlobal::context.device, m_descriptorPool, nullptr);
+        vkDestroyDescriptorSetLayout(VulkanGlobal::context.getDevice(), m_descriptorSetLayout, nullptr);
+        vkDestroyPipeline(VulkanGlobal::context.getDevice(), m_pipeline, nullptr);
+        vkDestroyPipelineLayout(VulkanGlobal::context.getDevice(), m_pipelineLayout, nullptr);
+        vkDestroyDescriptorPool(VulkanGlobal::context.getDevice(), m_descriptorPool, nullptr);
     }
 
     VkShaderModule Material::__createShaderModule(const std::vector<char> &code)
@@ -36,7 +36,7 @@ namespace mcvkp
         createInfo.pCode = reinterpret_cast<const uint32_t *>(code.data());
 
         VkShaderModule shaderModule;
-        if (vkCreateShaderModule(VulkanGlobal::context.device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
+        if (vkCreateShaderModule(VulkanGlobal::context.getDevice(), &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create shader module!");
         }
@@ -91,7 +91,7 @@ namespace mcvkp
             return;
         }
         __initDescriptorSetLayout();
-        __initPipeline(VulkanGlobal::swapchainContext.swapChainExtent, renderPass, m_vertexShaderPath, m_fragmentShaderPath);
+        __initPipeline(VulkanGlobal::swapchainContext.getExtent(), renderPass, m_vertexShaderPath, m_fragmentShaderPath);
         __initDescriptorPool();
         __initDescriptorSets();
         m_initialized = true;
@@ -175,7 +175,7 @@ namespace mcvkp
         VkPipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = VulkanGlobal::context.msaaSamples;
+        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
         multisampling.sampleShadingEnable = VK_TRUE;    // enable sample shading in the pipeline
         multisampling.minSampleShading = .2f;           // min fraction for sample shading; closer to one is smoother
         multisampling.pSampleMask = nullptr;            // Optional
@@ -211,7 +211,7 @@ namespace mcvkp
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &m_descriptorSetLayout;
 
-        if (vkCreatePipelineLayout(VulkanGlobal::context.device, &pipelineLayoutInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS)
+        if (vkCreatePipelineLayout(VulkanGlobal::context.getDevice(), &pipelineLayoutInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create pipeline layout!");
         }
@@ -247,13 +247,13 @@ namespace mcvkp
         pipelineInfo.basePipelineIndex = -1;              // Optional
         pipelineInfo.pDepthStencilState = &depthStencil;
 
-        if (vkCreateGraphicsPipelines(VulkanGlobal::context.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_pipeline) != VK_SUCCESS)
+        if (vkCreateGraphicsPipelines(VulkanGlobal::context.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_pipeline) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create graphics pipeline!");
         }
 
-        vkDestroyShaderModule(VulkanGlobal::context.device, fragShaderModule, nullptr);
-        vkDestroyShaderModule(VulkanGlobal::context.device, vertShaderModule, nullptr);
+        vkDestroyShaderModule(VulkanGlobal::context.getDevice(), fragShaderModule, nullptr);
+        vkDestroyShaderModule(VulkanGlobal::context.getDevice(), vertShaderModule, nullptr);
     }
 
     void Material::__initDescriptorSetLayout()
@@ -316,7 +316,7 @@ namespace mcvkp
         layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         layoutInfo.pBindings = bindings.data();
 
-        if (vkCreateDescriptorSetLayout(VulkanGlobal::context.device, &layoutInfo, nullptr, &m_descriptorSetLayout) != VK_SUCCESS)
+        if (vkCreateDescriptorSetLayout(VulkanGlobal::context.getDevice(), &layoutInfo, nullptr, &m_descriptorSetLayout) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create descriptor set layout!");
         }
@@ -364,7 +364,7 @@ namespace mcvkp
         poolInfo.pPoolSizes = poolSizes.data();
         poolInfo.maxSets = static_cast<uint32_t>(m_descriptorSetsSize);
 
-        if (vkCreateDescriptorPool(VulkanGlobal::context.device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS)
+        if (vkCreateDescriptorPool(VulkanGlobal::context.getDevice(), &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create descriptor pool!");
         }
@@ -380,7 +380,7 @@ namespace mcvkp
         allocInfo.pSetLayouts = layouts.data();
 
         m_descriptorSets.resize(m_descriptorSetsSize);
-        if (vkAllocateDescriptorSets(VulkanGlobal::context.device, &allocInfo, m_descriptorSets.data()) != VK_SUCCESS)
+        if (vkAllocateDescriptorSets(VulkanGlobal::context.getDevice(), &allocInfo, m_descriptorSets.data()) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to allocate descriptor sets!");
         }
@@ -476,7 +476,7 @@ namespace mcvkp
 
                 descriptorWrites.push_back(descriptorSet);
             }
-            vkUpdateDescriptorSets(VulkanGlobal::context.device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+            vkUpdateDescriptorSets(VulkanGlobal::context.getDevice(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
     }
 

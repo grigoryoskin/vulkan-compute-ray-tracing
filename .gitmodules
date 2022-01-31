@@ -13,3 +13,6 @@
 [submodule "external/memory-allocator-hpp"]
 	path = external/memory-allocator-hpp
 	url = https://github.com/malte-v/VulkanMemoryAllocator-Hpp
+[submodule "external/vk-bootstrap"]
+	path = external/vk-bootstrap
+	url = https://github.com/charles-lunarg/vk-bootstrap

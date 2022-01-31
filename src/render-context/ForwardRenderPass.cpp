@@ -40,8 +40,8 @@ namespace mcvkp
 
         m_colorImage->destroy();
         m_depthImage->destroy();
-        vkDestroyFramebuffer(VulkanGlobal::context.device, *m_framebuffer, nullptr);
-        vkDestroyRenderPass(VulkanGlobal::context.device, *m_renderPass, nullptr);
+        vkDestroyFramebuffer(VulkanGlobal::context.getDevice(), *m_framebuffer, nullptr);
+        vkDestroyRenderPass(VulkanGlobal::context.getDevice(), *m_renderPass, nullptr);
     }
 
     std::shared_ptr<mcvkp::Image> ForwardRenderPass::getColorImage()  { return m_colorImage; }
@@ -51,8 +51,8 @@ namespace mcvkp
     {
         // Color attachment for a framebuffer.
         VkAttachmentDescription colorAttachment{};
-        colorAttachment.format = VulkanGlobal::swapchainContext.swapChainImageFormat;
-        colorAttachment.samples = VulkanGlobal::context.msaaSamples;
+        colorAttachment.format = VulkanGlobal::swapchainContext.getFormat();
+        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
         // Clear the frame before render.
         colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         // Rendered contents will be stored in memory and can be read later.
@@ -71,7 +71,7 @@ namespace mcvkp
 
         VkAttachmentDescription depthAttachment{};
         depthAttachment.format = findDepthFormat();
-        depthAttachment.samples = VulkanGlobal::context.msaaSamples;
+        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
         depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -119,7 +119,7 @@ namespace mcvkp
         renderPassInfo.dependencyCount = 2;
         renderPassInfo.pDependencies = dependencies.data();
 
-        if (vkCreateRenderPass(VulkanGlobal::context.device, &renderPassInfo, nullptr, m_renderPass.get()) != VK_SUCCESS)
+        if (vkCreateRenderPass(VulkanGlobal::context.getDevice(), &renderPassInfo, nullptr, m_renderPass.get()) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create render pass!");
         }
@@ -136,11 +136,11 @@ namespace mcvkp
         framebufferInfo.renderPass = *m_renderPass;
         framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
         framebufferInfo.pAttachments = attachments.data();
-        framebufferInfo.width = VulkanGlobal::swapchainContext.swapChainExtent.width;
-        framebufferInfo.height = VulkanGlobal::swapchainContext.swapChainExtent.height;
+        framebufferInfo.width = VulkanGlobal::swapchainContext.getExtent().width;
+        framebufferInfo.height = VulkanGlobal::swapchainContext.getExtent().height;
         framebufferInfo.layers = 1;
 
-        if (vkCreateFramebuffer(VulkanGlobal::context.device, &framebufferInfo, nullptr, m_framebuffer.get()) != VK_SUCCESS)
+        if (vkCreateFramebuffer(VulkanGlobal::context.getDevice(), &framebufferInfo, nullptr, m_framebuffer.get()) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create framebuffer!");
         }
@@ -162,8 +162,8 @@ namespace mcvkp
     void ForwardRenderPass::createDepthResources()
     {
         VkFormat depthFormat = findDepthFormat();
-        ImageUtils::createImage(VulkanGlobal::swapchainContext.swapChainExtent.width,
-                                VulkanGlobal::swapchainContext.swapChainExtent.height,
+        ImageUtils::createImage(VulkanGlobal::swapchainContext.getExtent().width,
+                                VulkanGlobal::swapchainContext.getExtent().height,
                                 1,
                                 VK_SAMPLE_COUNT_1_BIT,
                                 depthFormat,
@@ -176,10 +176,10 @@ namespace mcvkp
 
     void ForwardRenderPass::createColorResources()
     {
-        VkFormat colorFormat = VulkanGlobal::swapchainContext.swapChainImageFormat;
+        VkFormat colorFormat = VulkanGlobal::swapchainContext.getFormat();
 
-        ImageUtils::createImage(VulkanGlobal::swapchainContext.swapChainExtent.width,
-                                VulkanGlobal::swapchainContext.swapChainExtent.height,
+        ImageUtils::createImage(VulkanGlobal::swapchainContext.getExtent().width,
+                                VulkanGlobal::swapchainContext.getExtent().height,
                                 1,
                                 VK_SAMPLE_COUNT_1_BIT,
                                 colorFormat,

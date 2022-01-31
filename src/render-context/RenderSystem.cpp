@@ -14,11 +14,11 @@ namespace mcvkp
             commandBuffers.resize(numBuffers);
             VkCommandBufferAllocateInfo allocInfo{};
             allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-            allocInfo.commandPool = VulkanGlobal::context.commandPool;
+            allocInfo.commandPool = VulkanGlobal::context.getCommandPool();
             allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
             allocInfo.commandBufferCount = numBuffers;
 
-            if (vkAllocateCommandBuffers(VulkanGlobal::context.device, &allocInfo, commandBuffers.data()) != VK_SUCCESS)
+            if (vkAllocateCommandBuffers(VulkanGlobal::context.getDevice(), &allocInfo, commandBuffers.data()) != VK_SUCCESS)
             {
                 throw std::runtime_error("failed to allocate command buffers!");
             }
@@ -50,11 +50,11 @@ namespace mcvkp
             VkCommandBufferAllocateInfo allocInfo{};
             allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
             allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-            allocInfo.commandPool = VulkanGlobal::context.commandPool;
+            allocInfo.commandPool = VulkanGlobal::context.getCommandPool();
             allocInfo.commandBufferCount = 1;
 
             VkCommandBuffer commandBuffer;
-            vkAllocateCommandBuffers(VulkanGlobal::context.device, &allocInfo, &commandBuffer);
+            vkAllocateCommandBuffers(VulkanGlobal::context.getDevice(), &allocInfo, &commandBuffer);
 
             VkCommandBufferBeginInfo beginInfo{};
             beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -74,10 +74,10 @@ namespace mcvkp
             submitInfo.commandBufferCount = 1;
             submitInfo.pCommandBuffers = &commandBuffer;
 
-            vkQueueSubmit(VulkanGlobal::context.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-            vkQueueWaitIdle(VulkanGlobal::context.graphicsQueue);
+            vkQueueSubmit(VulkanGlobal::context.getGraphicsQueue(), 1, &submitInfo, VK_NULL_HANDLE);
+            vkQueueWaitIdle(VulkanGlobal::context.getGraphicsQueue());
 
-            vkFreeCommandBuffers(VulkanGlobal::context.device, VulkanGlobal::context.commandPool, 1, &commandBuffer);
+            vkFreeCommandBuffers(VulkanGlobal::context.getDevice(), VulkanGlobal::context.getCommandPool(), 1, &commandBuffer);
         }
 
         void submit(
@@ -99,7 +99,7 @@ namespace mcvkp
             submitInfo.signalSemaphoreCount = 1;
             submitInfo.pSignalSemaphores = signalSemaphores;
 
-            if (vkQueueSubmit(VulkanGlobal::context.graphicsQueue, 1, &submitInfo, fence) != VK_SUCCESS)
+            if (vkQueueSubmit(VulkanGlobal::context.getGraphicsQueue(), 1, &submitInfo, fence) != VK_SUCCESS)
             {
                 throw std::runtime_error("failed to submit draw command buffer!");
             }
@@ -112,13 +112,13 @@ namespace mcvkp
 
             presentInfo.waitSemaphoreCount = numSemaphores;
             presentInfo.pWaitSemaphores = semaphores;
-            VkSwapchainKHR swapChains[] = {VulkanGlobal::swapchainContext.swapChain};
+            VkSwapchainKHR swapChains[] = {VulkanGlobal::swapchainContext.getBody()};
             presentInfo.swapchainCount = 1;
             presentInfo.pSwapchains = swapChains;
             presentInfo.pImageIndices = &imageIndex;
             presentInfo.pResults = nullptr;
 
-            VkResult result = vkQueuePresentKHR(VulkanGlobal::context.presentQueue, &presentInfo);
+            VkResult result = vkQueuePresentKHR(VulkanGlobal::context.getPresentQueue(), &presentInfo);
 
             if (result != VK_SUCCESS)
             {

@@ -19,9 +19,9 @@ namespace mcvkp
     {
         if (image != VK_NULL_HANDLE)
         {
-            vkDestroyImageView(VulkanGlobal::context.device, imageView, nullptr);
-            vkDestroyImage(VulkanGlobal::context.device, image, nullptr);
-            vmaFreeMemory(VulkanGlobal::context.allocator, allocation);
+            vkDestroyImageView(VulkanGlobal::context.getDevice(), imageView, nullptr);
+            vkDestroyImage(VulkanGlobal::context.getDevice(), image, nullptr);
+            vmaFreeMemory(VulkanGlobal::context.getAllocator(), allocation);
 
             image = VK_NULL_HANDLE;
         }
@@ -56,7 +56,7 @@ namespace mcvkp
             viewInfo.subresourceRange.layerCount = 1;
 
             VkImageView imageView;
-            if (vkCreateImageView(VulkanGlobal::context.device, &viewInfo, nullptr, &imageView) != VK_SUCCESS)
+            if (vkCreateImageView(VulkanGlobal::context.getDevice(), &viewInfo, nullptr, &imageView) != VK_SUCCESS)
             {
                 throw std::runtime_error("failed to create texture image view!");
             }
@@ -96,7 +96,7 @@ namespace mcvkp
             VmaAllocationCreateInfo vmaallocInfo = {};
             vmaallocInfo.usage = memoryUsage;
 
-            if (vmaCreateImage(VulkanGlobal::context.allocator,
+            if (vmaCreateImage(VulkanGlobal::context.getAllocator(),
                                &imageInfo,
                                &vmaallocInfo,
                                &allocatedImage->image,
@@ -217,7 +217,7 @@ namespace mcvkp
         {
             // Check if image format supports linear blitting
             VkFormatProperties formatProperties;
-            vkGetPhysicalDeviceFormatProperties(VulkanGlobal::context.physicalDevice, imageFormat, &formatProperties);
+            vkGetPhysicalDeviceFormatProperties(VulkanGlobal::context.getPhysicalDevice(), imageFormat, &formatProperties);
 
             if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
             {
@@ -366,7 +366,7 @@ namespace mcvkp
             samplerInfo.maxLod = static_cast<float>(mipLevels);
             samplerInfo.mipLodBias = 0.0f; // Optional
 
-            if (vkCreateSampler(VulkanGlobal::context.device, &samplerInfo, nullptr, textureSampler.get()) != VK_SUCCESS)
+            if (vkCreateSampler(VulkanGlobal::context.getDevice(), &samplerInfo, nullptr, textureSampler.get()) != VK_SUCCESS)
             {
                 throw std::runtime_error("failed to create texture sampler!");
             }
@@ -391,7 +391,7 @@ namespace mcvkp
 
     Texture::~Texture()
     {
-        vkDestroySampler(VulkanGlobal::context.device, *m_sampler, nullptr);
+        vkDestroySampler(VulkanGlobal::context.getDevice(), *m_sampler, nullptr);
     }
 
     VkDescriptorImageInfo Texture::getDescriptorInfo()

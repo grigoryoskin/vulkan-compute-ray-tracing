@@ -45,7 +45,7 @@ namespace mcvkp
         renderPassInfo.renderPass = *m_RenderPass->getBody();
         renderPassInfo.framebuffer = *m_RenderPass->getFramebuffer(currentFrame);
         renderPassInfo.renderArea.offset = {0, 0};
-        renderPassInfo.renderArea.extent = VulkanGlobal::swapchainContext.swapChainExtent;
+        renderPassInfo.renderArea.extent = VulkanGlobal::swapchainContext.getExtent();
         std::array<VkClearValue, 2> clearValues{};
         clearValues[0].color = {1.0f, 0.5f, 1.0f, 1.0f};
         clearValues[1].depthStencil = {1.0f, 0};
