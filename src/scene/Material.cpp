@@ -176,7 +176,6 @@ namespace mcvkp
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampling.sampleShadingEnable = VK_FALSE;
         multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-        multisampling.sampleShadingEnable = VK_TRUE;    // enable sample shading in the pipeline
         multisampling.minSampleShading = .2f;           // min fraction for sample shading; closer to one is smoother
         multisampling.pSampleMask = nullptr;            // Optional
         multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
