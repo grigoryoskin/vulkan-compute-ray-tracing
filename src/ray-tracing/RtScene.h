@@ -5,7 +5,7 @@
 #include "GpuModels.h"
 #include "Bvh.h"
 #include "../utils/glm.h"
-#include "../scene/mesh.h"
+#include "../scene/Mesh.h"
 #include "../utils/RootDir.h"
 
 namespace GpuModel

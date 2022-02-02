@@ -19,7 +19,7 @@
 #include "scene/ComputeMaterial.h"
 #include "scene/ComputeModel.h"
 #include "ray-tracing/RtScene.h"
-
+#include "memory/ImageUtils.h"
 // TODO: Organize includes!
 
 #include <stdint.h>
@@ -42,6 +42,8 @@ struct UniformBufferObject
     alignas(4) float time;
     alignas(4) u_int32_t currentSample;
     alignas(4) u_int32_t numTriangles;
+    alignas(4) u_int32_t numLights;
+    alignas(4) u_int32_t numSpheres;
 };
 
 class HelloComputeApplication
@@ -103,6 +105,23 @@ private:
         BufferUtils::createBundle<GpuModel::Sphere>(spheresBufferBundle.get(), rtScene->spheres.data(), rtScene->spheres.size(),
                                                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
+        auto accumulationTexture = std::make_shared<mcvkp::Image>();
+        mcvkp::ImageUtils::createImage(VulkanGlobal::swapchainContext.getExtent().width,
+                                       VulkanGlobal::swapchainContext.getExtent().height,
+                                       1,
+                                       VK_SAMPLE_COUNT_1_BIT,
+                                       VK_FORMAT_R8G8B8A8_UNORM,
+                                       VK_IMAGE_TILING_OPTIMAL,
+                                       VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                                       VK_IMAGE_ASPECT_COLOR_BIT,
+                                       VMA_MEMORY_USAGE_GPU_ONLY,
+                                       accumulationTexture);
+        mcvkp::ImageUtils::transitionImageLayout(accumulationTexture->image,
+                                                 VK_FORMAT_R8G8B8A8_UNORM,
+                                                 VK_IMAGE_LAYOUT_UNDEFINED,
+                                                 VK_IMAGE_LAYOUT_GENERAL,
+                                                 1);
+
         auto targetTexture = std::make_shared<mcvkp::Image>();
         mcvkp::ImageUtils::createImage(VulkanGlobal::swapchainContext.getExtent().width,
                                        VulkanGlobal::swapchainContext.getExtent().height,
@@ -110,7 +129,7 @@ private:
                                        VK_SAMPLE_COUNT_1_BIT,
                                        VK_FORMAT_R8G8B8A8_UNORM,
                                        VK_IMAGE_TILING_OPTIMAL,
-                                       VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+                                       VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
                                        VK_IMAGE_ASPECT_COLOR_BIT,
                                        VMA_MEMORY_USAGE_GPU_ONLY,
                                        targetTexture);
@@ -125,6 +144,7 @@ private:
         auto computeMaterial = std::make_shared<ComputeMaterial>(path_prefix + "/shaders/generated/ray-trace-compute.spv");
         computeMaterial->addUniformBufferBundle(uniformBufferBundle, VK_SHADER_STAGE_COMPUTE_BIT);
         computeMaterial->addStorageImage(targetTexture, VK_SHADER_STAGE_COMPUTE_BIT);
+        computeMaterial->addStorageImage(accumulationTexture, VK_SHADER_STAGE_COMPUTE_BIT);
         computeMaterial->addStorageBufferBundle(triangleBufferBundle, VK_SHADER_STAGE_COMPUTE_BIT);
         computeMaterial->addStorageBufferBundle(materialBufferBundle, VK_SHADER_STAGE_COMPUTE_BIT);
         computeMaterial->addStorageBufferBundle(aabbBufferBundle, VK_SHADER_STAGE_COMPUTE_BIT);
@@ -151,7 +171,7 @@ private:
             currentSample = 0;
             hasMoved = false;
         }
-        UniformBufferObject ubo = {camera.Position, currentTime, currentSample, (uint32_t)rtScene->triangles.size()};
+        UniformBufferObject ubo = {camera.Position, currentTime, currentSample, (uint32_t)rtScene->triangles.size(), (uint32_t)rtScene->lights.size(), (uint32_t)rtScene->spheres.size()};
 
         auto &allocation = computeModel->getMaterial()->getUniformBufferBundles()[0].data->buffers[currentImage]->allocation;
         void *data;
@@ -171,7 +191,9 @@ private:
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
 
-        auto tagetImage = computeModel->getMaterial()->getStorageImages()[0].data;
+        auto targetImage = computeModel->getMaterial()->getStorageImages()[0].data;
+        auto accumulationImage = computeModel->getMaterial()->getStorageImages()[1].data;
+
         if (vkAllocateCommandBuffers(VulkanGlobal::context.getDevice(), &allocInfo, commandBuffers.data()) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to allocate command buffers!");
@@ -191,14 +213,7 @@ private:
             }
 
             // Convert image layout to GENERAL before writing into it in compute shader.
-            VkImageMemoryBarrier computeMemoryBarrier = {};
-            computeMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            computeMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            computeMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-            computeMemoryBarrier.image = tagetImage->image;
-            computeMemoryBarrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-            computeMemoryBarrier.srcAccessMask = 0;
-            computeMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            VkImageMemoryBarrier read2Gen = mcvkp::ImageUtils::ReadOnlyToGeneralBarrier(targetImage->image);
 
             vkCmdPipelineBarrier(
                 commandBuffers[i],
@@ -207,29 +222,66 @@ private:
                 0,
                 0, nullptr,
                 0, nullptr,
-                1, &computeMemoryBarrier);
+                1, &read2Gen);
 
             // Bind compute pipeline and dispatch compute command.
-            computeModel->computeCommand(commandBuffers[i], i, tagetImage->width / 32, tagetImage->height / 32, 1);
+            computeModel->computeCommand(commandBuffers[i], i, targetImage->width / 32, targetImage->height / 32, 1);
 
-            // Convert image layout to READ_ONLY_OPTIMAL before reading from it in fragment shader.
-            VkImageMemoryBarrier screenQuadMemoryBarrier = {};
-            screenQuadMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            screenQuadMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-            screenQuadMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            screenQuadMemoryBarrier.image = tagetImage->image;
-            screenQuadMemoryBarrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
-            screenQuadMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-            screenQuadMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            // Transfer target and accumulation images to transfer layout and copy one into another.
+            VkImageMemoryBarrier gen2TranSrc = mcvkp::ImageUtils::generalToTransferSrcBarrier(targetImage->image);
 
             vkCmdPipelineBarrier(
                 commandBuffers[i],
                 VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0,
+                0, nullptr,
+                0, nullptr,
+                1, &gen2TranSrc);
+
+            VkImageMemoryBarrier gen2TranDst = mcvkp::ImageUtils::generalToTransferDstBarrier(accumulationImage->image);
+
+            vkCmdPipelineBarrier(
+                commandBuffers[i],
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0,
+                0, nullptr,
+                0, nullptr,
+                1, &gen2TranDst);
+
+            VkImageCopy region = mcvkp::ImageUtils::imageCopyRegion(targetImage->width, targetImage->height);
+            vkCmdCopyImage(
+                commandBuffers[i],
+                targetImage->image,
+                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                accumulationImage->image,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1,
+                &region);
+
+            VkImageMemoryBarrier tranDst2Gen = mcvkp::ImageUtils::transferDstToGeneralBarrier(accumulationImage->image);
+
+            vkCmdPipelineBarrier(
+                commandBuffers[i],
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                0,
+                0, nullptr,
+                0, nullptr,
+                1, &tranDst2Gen);
+
+            // Convert image layout to READ_ONLY_OPTIMAL before reading from it in fragment shader.
+            VkImageMemoryBarrier tranSrc2ReadOnly = mcvkp::ImageUtils::transferSrcToReadOnlyBarrier(targetImage->image);
+
+            vkCmdPipelineBarrier(
+                commandBuffers[i],
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                 0,
                 0, nullptr,
                 0, nullptr,
-                1, &screenQuadMemoryBarrier);
+                1, &tranSrc2ReadOnly);
 
             // Bind graphics pipeline and dispatch draw command.
             postProcessScene->writeRenderCommand(commandBuffers[i], i);

@@ -10,27 +10,31 @@ layout(binding = 0) uniform UniformBufferObject {
     float time;
     uint currentSample;
     uint numTriangles;
+    uint numLights;
+    uint numSpheres;
 } ubo;
 
-layout(set = 0, binding = 1, rgba8) uniform image2D img;
+layout(binding = 1, rgba8) uniform image2D targetTexture;
 
-layout(binding = 2) readonly buffer TriangleBufferObject {
+layout(binding = 2, rgba8) uniform image2D accumulationTex;
+
+layout(binding = 3) readonly buffer TriangleBufferObject {
     triangle[] triangles;
  };
 
- layout(binding = 3) readonly buffer MaterialBufferObject {
+ layout(binding = 4) readonly buffer MaterialBufferObject {
     material[] materials;
  };
 
-layout(binding = 4) readonly buffer AabbBufferObject {
+layout(binding = 5) readonly buffer AabbBufferObject {
     bvhNode[] bvh;
  };
 
-layout(binding = 5) readonly buffer LightsBufferObject {
+layout(binding = 6) readonly buffer LightsBufferObject {
     light[] lights;
  };
 
- layout(binding = 6) readonly buffer SpheresBufferObject {
+ layout(binding = 7) readonly buffer SpheresBufferObject {
     sphere[] spheres;
  };
 
@@ -223,7 +227,7 @@ vec3 ray_color(ray r) {
 void main()
 {   
     // Image
-    vec2 imageSize = vec2(imageSize(img));
+    vec2 imageSize = vec2(imageSize(targetTexture));
 
     // Camera
     float vfov = 30;
@@ -244,8 +248,10 @@ void main()
     vec3 pixel_color = ray_color(r);
 
     // Adding current ray color to existing color in the accumulation texture.
-    vec4 currentColor = imageLoad(img, ivec2(gl_GlobalInvocationID.xy)).rgba;
-    vec4 to_write = (vec4(pixel_color, 1.0) + currentColor*(ubo.currentSample))/(ubo.currentSample + 1);
+    
+    vec4 currentColor = imageLoad(accumulationTex, ivec2(gl_GlobalInvocationID.xy)).rgba * min(ubo.currentSample, 1.0);
 
-    imageStore(img, ivec2(gl_GlobalInvocationID.xy), to_write);
+    vec4 to_write = (vec4(pixel_color, 1.0) + currentColor*(ubo.currentSample)) / (ubo.currentSample+1.0);
+
+    imageStore(targetTexture, ivec2(gl_GlobalInvocationID.xy), to_write);
 }
