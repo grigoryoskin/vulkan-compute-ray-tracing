@@ -18,26 +18,26 @@ layout(binding = 1, rgba8) uniform image2D targetTexture;
 
 layout(binding = 2, rgba8) uniform image2D accumulationTex;
 
-layout(binding = 3) readonly buffer TriangleBufferObject {
+layout(std430, binding = 3) readonly buffer TriangleBufferObject {
     triangle[] triangles;
  };
 
- layout(binding = 4) readonly buffer MaterialBufferObject {
+ layout(std430, binding = 4) readonly buffer MaterialBufferObject {
     material[] materials;
  };
 
-layout(binding = 5) readonly buffer AabbBufferObject {
+layout(std430, binding = 5) readonly buffer AabbBufferObject {
     bvhNode[] bvh;
  };
 
-layout(binding = 6) readonly buffer LightsBufferObject {
+layout(std430, binding = 6) readonly buffer LightsBufferObject {
     light[] lights;
  };
 
- layout(binding = 7) readonly buffer SpheresBufferObject {
+ layout(std430, binding = 7) readonly buffer SpheresBufferObject {
     sphere[] spheres;
  };
-
+ 
 // Random functions
  #include "include/random.glsl"
 
